@@ -7,10 +7,11 @@ import { AppSidebar } from "@/components/layout/AppSidebar";
 
 type AppShellProps = {
   workspaceName: string;
+  account: ReactNode;
   children: ReactNode;
 };
 
-export function AppShell({ workspaceName, children }: AppShellProps) {
+export function AppShell({ workspaceName, account, children }: AppShellProps) {
   const [isNavigationOpen, setIsNavigationOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -77,6 +78,7 @@ export function AppShell({ workspaceName, children }: AppShellProps) {
       <div className="flex min-w-0 flex-1 flex-col">
         <AppHeader
           workspaceName={workspaceName}
+          account={account}
           onOpenNavigation={openNavigation}
           isNavigationOpen={isNavigationOpen}
           menuButtonRef={menuButtonRef}

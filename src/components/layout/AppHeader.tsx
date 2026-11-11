@@ -1,12 +1,14 @@
 "use client";
 
-import type { Ref } from "react";
+import type { ReactNode, Ref } from "react";
 import { usePathname } from "next/navigation";
-import { ChevronRight, Menu, Search, UserRound } from "lucide-react";
+import { ChevronRight, Menu, Search } from "lucide-react";
 import { getPageTitle } from "@/lib/navigation";
 
 type AppHeaderProps = {
   workspaceName: string;
+  /** Account controls rendered at the end of the header. */
+  account: ReactNode;
   onOpenNavigation: () => void;
   isNavigationOpen: boolean;
   menuButtonRef?: Ref<HTMLButtonElement>;
@@ -14,6 +16,7 @@ type AppHeaderProps = {
 
 export function AppHeader({
   workspaceName,
+  account,
   onOpenNavigation,
   isNavigationOpen,
   menuButtonRef,
@@ -79,14 +82,7 @@ export function AppHeader({
           </div>
         </div>
 
-        <div
-          role="img"
-          aria-label="Account avatar placeholder. Sign-in is not available yet."
-          title="Sign-in is not available yet"
-          className="flex size-9 shrink-0 items-center justify-center rounded-full border border-line bg-canvas text-ink-subtle"
-        >
-          <UserRound aria-hidden="true" className="size-4.5" />
-        </div>
+        {account}
       </div>
     </header>
   );

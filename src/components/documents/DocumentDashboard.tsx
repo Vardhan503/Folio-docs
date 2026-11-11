@@ -10,6 +10,9 @@ type DocumentDashboardProps = {
   view: DashboardView;
   ownedDocuments: DocumentSummary[];
   sharedDocuments: DocumentSummary[];
+  ownedLoadError?: string | null;
+  /** Renders placeholder rows while document data streams in. */
+  isLoading?: boolean;
 };
 
 const viewCopy: Record<DashboardView, { title: string; description: string }> =
@@ -30,6 +33,8 @@ export function DocumentDashboard({
   view,
   ownedDocuments,
   sharedDocuments,
+  ownedLoadError,
+  isLoading = false,
 }: DocumentDashboardProps) {
   const copy = viewCopy[view];
   const showOwned = view === "my-documents";
@@ -76,6 +81,8 @@ export function DocumentDashboard({
             icon={FileText}
             tone="owned"
             documents={ownedDocuments}
+            errorMessage={ownedLoadError}
+            isLoading={isLoading}
             emptyState={
               <EmptyState
                 icon={FileText}
@@ -98,7 +105,7 @@ export function DocumentDashboard({
               icon={Inbox}
               size={showOwned ? "compact" : "default"}
               title="Nothing shared with you yet"
-              description="When someone shares a document with you, it will show up here."
+              description="Sharing isn't available yet. Once it is, documents other people share with you will show up here."
             />
           }
         />
