@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "@/lib/auth/session";
 import {
   createDocument,
+  deleteDocument,
+  duplicateDocument,
+  exportDocument,
   getDocumentById,
   importDocument,
   updateDocumentContent,
@@ -367,5 +370,151 @@ describe("importDocument", () => {
       error: "We couldn't import this file. Please try again.",
     });
     expect(log).toHaveBeenCalled();
+  });
+});
+
+describe("document actions", () => {
+  const content = {
+    type: "doc",
+    content: [{ type: "paragraph", content: [{ type: "text", text: "Hello", marks: [{ type: "bold" }] }] }],
+  };
+  function sourceRow(role: "owner" | "editor" | "viewer") {
+    return {
+      data: {
+        title: "Plan",
+        content,
+        owner_id: role === "owner" ? USER.id : "33333333-3333-4333-8333-333333333333",
+        document_shares: role === "owner" ? [] : [{ role, user_id: USER.id }],
+      },
+      error: null,
+    };
+  }
+
+  describe("duplicateDocument", () => {
+    it.each(["owner", "editor"] as const)(
+      "copies title and content into a new document owned by the %s",
+      async (role) => {
+        db.queue = [sourceRow(role)];
+        db.response = { data: { id: "44444444-4444-4444-8444-444444444444", title: "Copy of Plan" }, error: null };
+
+        const result = await duplicateDocument(DOCUMENT_ID);
+
+        expect(result).toEqual({
+          ok: true,
+          data: { id: "44444444-4444-4444-8444-444444444444", title: "Copy of Plan" },
+        });
+        expect(callsTo("insert")).toEqual([[{ owner_id: USER.id, title: "Copy of Plan", content }]]);
+        expect(callsTo("from")).toEqual([["documents"], ["documents"]]);
+      },
+    );
+
+    it("never copies shares", async () => {
+      db.queue = [sourceRow("owner")];
+      db.response = { data: { id: DOCUMENT_ID, title: "Copy of Plan" }, error: null };
+      await duplicateDocument(DOCUMENT_ID);
+      expect(callsTo("from")).not.toContainEqual(["document_shares"]);
+    });
+
+    it("refuses viewers without writing", async () => {
+      db.queue = [sourceRow("viewer")];
+      const result = await duplicateDocument(DOCUMENT_ID);
+      expect(result).toMatchObject({ ok: false, code: "forbidden" });
+      expect(callsTo("insert")).toEqual([]);
+    });
+
+    it("treats documents hidden by RLS as not found", async () => {
+      db.response = { data: null, error: null };
+      expect(await duplicateDocument(DOCUMENT_ID)).toEqual(NOT_FOUND);
+      expect(callsTo("insert")).toEqual([]);
+    });
+
+    it("rejects signed-out callers and malformed ids before querying", async () => {
+      expect(await duplicateDocument("not-a-uuid")).toEqual(NOT_FOUND);
+      session.user = null;
+      expect(await duplicateDocument(DOCUMENT_ID)).toMatchObject({ ok: false, code: "unauthenticated" });
+      expect(createClient).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("exportDocument", () => {
+    it("returns the saved content as Markdown with a safe filename", async () => {
+      db.response = { ...sourceRow("editor"), data: { ...sourceRow("editor").data, title: "Q3/../plan: final?" } };
+
+      const result = await exportDocument(DOCUMENT_ID, "md");
+
+      expect(result).toEqual({
+        ok: true,
+        data: {
+          filename: "Q3 .. plan final.md",
+          mimeType: "text/markdown;charset=utf-8",
+          text: "**Hello**\n",
+        },
+      });
+    });
+
+    it("returns plain text", async () => {
+      db.response = sourceRow("owner");
+      const result = await exportDocument(DOCUMENT_ID, "txt");
+      expect(result).toMatchObject({ ok: true, data: { filename: "Plan.txt", text: "Hello\n" } });
+    });
+
+    it("refuses viewers", async () => {
+      db.response = sourceRow("viewer");
+      expect(await exportDocument(DOCUMENT_ID, "txt")).toMatchObject({ ok: false, code: "forbidden" });
+    });
+
+    it("rejects unknown formats before querying", async () => {
+      expect(await exportDocument(DOCUMENT_ID, "html")).toMatchObject({ ok: false, code: "invalid_input" });
+      expect(createClient).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("deleteDocument", () => {
+    it("deletes only a document the caller owns", async () => {
+      db.queue = [OWNER_ACCESS];
+      db.response = { data: { id: DOCUMENT_ID }, error: null };
+
+      const result = await deleteDocument(DOCUMENT_ID);
+
+      expect(result).toEqual({ ok: true, data: { id: DOCUMENT_ID } });
+      expect(callsTo("delete")).toEqual([[]]);
+      expect(callsTo("eq")).toEqual([
+        ["id", DOCUMENT_ID],
+        ["document_shares.user_id", USER.id],
+        ["id", DOCUMENT_ID],
+        ["owner_id", USER.id],
+      ]);
+    });
+
+    it.each(["editor", "viewer"] as const)("refuses an %s without deleting", async (role) => {
+      db.queue = [sourceRow(role)];
+
+      const result = await deleteDocument(DOCUMENT_ID);
+
+      expect(result).toEqual({
+        ok: false,
+        code: "forbidden",
+        error: "Only the owner can delete this document.",
+      });
+      expect(callsTo("delete")).toEqual([]);
+    });
+
+    it("treats documents hidden by RLS as not found", async () => {
+      db.response = { data: null, error: null };
+      expect(await deleteDocument(DOCUMENT_ID)).toEqual(NOT_FOUND);
+      expect(callsTo("delete")).toEqual([]);
+    });
+
+    it("reports not_found when RLS removed no row", async () => {
+      db.queue = [OWNER_ACCESS];
+      db.response = { data: null, error: null };
+      expect(await deleteDocument(DOCUMENT_ID)).toEqual(NOT_FOUND);
+    });
+
+    it("rejects signed-out callers without querying", async () => {
+      session.user = null;
+      expect(await deleteDocument(DOCUMENT_ID)).toMatchObject({ ok: false, code: "unauthenticated" });
+      expect(createClient).not.toHaveBeenCalled();
+    });
   });
 });

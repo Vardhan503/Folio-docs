@@ -21,6 +21,15 @@ export function canEdit(role: DocumentRole): boolean {
   return role === "owner" || role === "editor";
 }
 
+/** Copies and downloads take the full content, so they follow edit access. */
+export function canCopyOrExport(role: DocumentRole): boolean {
+  return canEdit(role);
+}
+
+export function canDelete(role: DocumentRole): boolean {
+  return role === "owner";
+}
+
 const MAX_EMAIL_LENGTH = 320;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 

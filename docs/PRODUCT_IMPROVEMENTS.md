@@ -122,3 +122,24 @@ The original assessment requires a public live URL and a 3–5 minute walkthroug
 
 - Task 6 was already committed as `06760d1`; the working tree was clean. `.env.local` is ignored (`.gitignore` rule `.env*`), only `.env.example` is tracked, and a scan of the commit found no passwords, JWTs, or secret keys.
 - Re-run results: `npm run lint` exit 0; `npx tsc --noEmit` exit 0; `npm run test -- --run` 209/209 in 7 files; `npm run build` exit 0; `npm run test:rls-live` 33 passed, 0 failed against the hosted project.
+
+### Slice 2 — Sidebar and search (`c1de1e4`)
+
+- Desktop sidebar toggle (preference in `localStorage`, read with `useSyncExternalStore` and a server snapshot of "expanded", so there is no hydration mismatch); the Task 6 mobile drawer is unchanged.
+- Header title search over the lists each page already loaded (no new endpoint): case- and accent-insensitive, `/` to focus, Escape to clear, a match count, and a "No matching documents" state with Clear search. The query is kept in memory per page and resets on sign-out because the full page load discards it.
+- Verified in the browser as the second demo user at 1440 px and 375 px. Tests: 224/224.
+
+### Slice 3 — Editor formatting (`c748b33`)
+
+- Official Tiptap `TextStyle`, `Color`, `FontSize`, `Highlight` (multicolor), and `TextAlign` extensions, wrapped so they parse and render only palette values. Toolbar: text color, highlight, font size, strikethrough, alignment, quote, and clear formatting, with a container-query **More** menu on narrow toolbars.
+- `validation.ts` accepts `textStyle` and `highlight` marks and `textAlign` only with values from `formatting.ts`; anything else is rejected on save.
+- Verified in the browser: colour, highlight, size, and alignment survive autosave and a reload with identical JSON; layouts at 375, 1100 (sidebar open and closed), and 1440 px. Tests: 246/246; lint, tsc, build clean; `npm audit --omit=dev` 0 vulnerabilities.
+
+### Slice 4 — Document actions
+
+- Editor-header **⋯** menu: Rename, Make a copy, Download `.txt` / `.md`, Copy link, and owner-only Delete with a confirmation dialog. No migration: the owner-only delete policy and the `on delete cascade` from shares already existed.
+- Server functions re-check the role through RLS: copy and download need owner or editor, delete needs owner (and filters by `owner_id`). Delete calls `revalidatePath("/", "layout")` so pages kept in the client cache are refetched.
+- Verified in the browser as the second demo user on their own document: rename, both downloads (content and the `Q3 plan final` filename), copy made right after an edit includes that edit, delete dialog (Cancel focused by default) returns to My Documents with a notice, the copy's URL then shows "Document not found"; as an editor on a shared document the menu has no Delete. Not verified in the browser: viewer menu (only Copy link) and a successful clipboard write (the automation tab has no window focus, so the clipboard is refused and the fallback message was shown).
+- `npm run test:rls-live`: 39 passed, 0 failed (new: anonymous and viewer can't delete, owner deletes exactly one row, shares are removed with the document).
+- Tests: 282/282 in 11 files; lint, tsc, build clean.
+

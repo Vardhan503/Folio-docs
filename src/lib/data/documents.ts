@@ -11,10 +11,25 @@ import {
   createEmptyDocument,
   isUuid,
   parseDocumentContent,
+  validateDocumentContent,
   validateTitle,
+  type TiptapDocument,
 } from "@/lib/documents/validation";
+import {
+  copyTitle,
+  documentToMarkdown,
+  documentToPlainText,
+  exportFilename,
+} from "@/lib/documents/export";
+import { EXPORT_FORMATS, isExportFormat } from "@/lib/documents/export-formats";
 import { prepareImport } from "@/lib/import/prepare-import";
-import { canEdit, isShareRole, type DocumentRole } from "@/lib/sharing/roles";
+import {
+  canCopyOrExport,
+  canDelete,
+  canEdit,
+  isShareRole,
+  type DocumentRole,
+} from "@/lib/sharing/roles";
 import type { DocumentRow } from "@/lib/supabase/database.types";
 import { createClient } from "@/lib/supabase/server";
 import type { DocumentSummary } from "@/types/document";
@@ -242,6 +257,131 @@ export async function updateDocumentTitle(
 
   if (error) {
     return failure("updateDocumentTitle", error, "We couldn't rename this document.");
+  }
+  if (!data) return notFound();
+
+  return success(data);
+}
+
+/** The last saved title and content, for callers whose role passes `allowed`. */
+async function readDocumentFor(
+  documentId: unknown,
+  allowed: (role: DocumentRole) => boolean,
+  forbiddenMessage: string,
+): Promise<
+  DataResult<{
+    supabase: SupabaseClient;
+    userId: string;
+    title: string;
+    content: TiptapDocument;
+  }>
+> {
+  const user = await getOptionalUser();
+  if (!user) return rejected("unauthenticated", SESSION_EXPIRED_MESSAGE);
+  if (!isUuid(documentId)) return notFound();
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("documents")
+    .select("title, content, owner_id, document_shares(role, user_id)")
+    .eq("id", documentId)
+    .eq("document_shares.user_id", user.id)
+    .maybeSingle();
+
+  if (error) {
+    return failure(
+      "readDocumentFor",
+      error,
+      "We couldn't load this document. Please try again.",
+    );
+  }
+  const role = data ? roleFromAccessRow(data satisfies AccessRow, user.id) : null;
+  if (!data || !role) return notFound();
+  if (!allowed(role)) return rejected("forbidden", forbiddenMessage);
+
+  const content = validateDocumentContent(data.content);
+  if (!content.ok) return rejected("invalid_input", content.error);
+
+  return success({ supabase, userId: user.id, title: data.title, content: content.value });
+}
+
+/**
+ * Copies the last saved title and content into a new document owned by the
+ * caller. Shares are not copied.
+ */
+export async function duplicateDocument(
+  documentId: unknown,
+): Promise<DataResult<{ id: string; title: string }>> {
+  const source = await readDocumentFor(
+    documentId,
+    canCopyOrExport,
+    "You have view-only access, so you can't make a copy of this document.",
+  );
+  if (!source.ok) return source;
+
+  const { supabase, userId, title, content } = source.data;
+  const { data, error } = await supabase
+    .from("documents")
+    .insert({ owner_id: userId, title: copyTitle(title), content })
+    .select("id, title")
+    .single();
+
+  if (error) {
+    return failure("duplicateDocument", error, "We couldn't copy this document. Please try again.");
+  }
+  return success(data);
+}
+
+export type ExportedDocument = { filename: string; mimeType: string; text: string };
+
+/** The last saved version as .txt or .md, built from the stored JSON. */
+export async function exportDocument(
+  documentId: unknown,
+  format: unknown,
+): Promise<DataResult<ExportedDocument>> {
+  if (!isExportFormat(format)) return rejected("invalid_input", "Choose .txt or .md.");
+
+  const source = await readDocumentFor(
+    documentId,
+    canCopyOrExport,
+    "You have view-only access, so you can't download this document.",
+  );
+  if (!source.ok) return source;
+
+  const { title, content } = source.data;
+  return success({
+    filename: exportFilename(title, format),
+    mimeType: EXPORT_FORMATS[format].mimeType,
+    text: format === "md" ? documentToMarkdown(content) : documentToPlainText(content),
+  });
+}
+
+/**
+ * Permanently deletes a document the caller owns; its shares go with it
+ * (`on delete cascade`). RLS allows only owners to delete.
+ */
+export async function deleteDocument(documentId: unknown): Promise<DataResult<{ id: string }>> {
+  const user = await getOptionalUser();
+  if (!user) return rejected("unauthenticated", SESSION_EXPIRED_MESSAGE);
+  if (!isUuid(documentId)) return notFound();
+
+  const supabase = await createClient();
+  const access = await resolveDocumentRole(supabase, user.id, documentId);
+  if (!access.ok) return access;
+  if (!canDelete(access.data)) {
+    return rejected("forbidden", "Only the owner can delete this document.");
+  }
+
+  const { data, error } = await supabase
+    .from("documents")
+    .delete()
+    .eq("id", documentId)
+    .eq("owner_id", user.id)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    return failure("deleteDocument", error, "We couldn't delete this document. Please try again.");
   }
   if (!data) return notFound();
 

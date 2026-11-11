@@ -261,6 +261,31 @@ try {
   check(Boolean(anonRead.error) || anonRead.data?.length === 0, "anonymous users cannot read documents");
   const anonLookup = await anon.rpc("find_share_recipient", { p_document_id: doc, p_email: owner.email });
   check(Boolean(anonLookup.error), "anonymous users cannot call find_share_recipient");
+  check(
+    (await changed(anon.from("documents").delete().eq("id", doc))) <= 0,
+    "anonymous users cannot delete documents",
+  );
+
+  // Deletion: viewers can't delete; the owner's delete also removes the shares.
+  const reshare = await A.client
+    .from("document_shares")
+    .insert({ document_id: doc, user_id: B.id, role: "viewer" });
+  check(!reshare.error, "owner shares the document again as viewer");
+  check(
+    (await changed(B.client.from("documents").delete().eq("id", doc))) === 0,
+    "viewer cannot delete the document",
+  );
+  check(
+    (await changed(A.client.from("documents").delete().eq("id", doc))) === 1,
+    "owner deletes the document",
+  );
+  const deletedRead = await B.client.from("documents").select("id").eq("id", doc);
+  check(deletedRead.data?.length === 0, "collaborator can no longer read the deleted document");
+  const deletedShares = await A.client.from("document_shares").select("user_id").eq("document_id", doc);
+  check(
+    !deletedShares.error && deletedShares.data.length === 0,
+    "deleting the document removes its shares",
+  );
 } finally {
   const cleanup = await A.client.from("documents").delete().eq("id", doc);
   if (cleanup.error) console.error(`Could not delete the test document ${doc}; delete it manually.`);

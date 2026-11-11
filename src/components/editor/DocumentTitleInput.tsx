@@ -10,6 +10,7 @@ type DocumentTitleInputProps = {
   initialTitle: string;
   /** Viewers see the title as plain text. */
   readOnly?: boolean;
+  onSaved?: (title: string) => void;
 };
 
 const NETWORK_ERROR = "We couldn't reach the server to rename this document.";
@@ -18,6 +19,7 @@ export function DocumentTitleInput({
   documentId,
   initialTitle,
   readOnly = false,
+  onSaved,
 }: DocumentTitleInputProps) {
   const [value, setValue] = useState(initialTitle);
   const [savedTitle, setSavedTitle] = useState(initialTitle);
@@ -60,6 +62,7 @@ export function DocumentTitleInput({
     setIsSaving(false);
     if (result.ok) {
       setSavedTitle(result.data.title);
+      onSaved?.(result.data.title);
     } else {
       setError(result.error);
     }

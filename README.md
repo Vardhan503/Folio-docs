@@ -120,10 +120,31 @@ Click the title to rename it. It saves when the field loses focus or you press E
 - Leaving with unsaved changes triggers the browser's "leave page?" prompt; the in-app Back link asks for confirmation. If you navigate away inside the app, a final best-effort save is sent.
 - Title and content are saved by separate actions that update separate columns, so renaming never overwrites content and vice versa.
 
+### Document actions
+
+The **⋯** button next to Share on a document page opens a menu (arrow keys, Home/End, and Escape work):
+
+- **Rename** moves focus to the title field.
+- **Make a copy** creates "Copy of …" with the same content and formatting, owned by you, and opens it. Shares are not copied, so the copy is private until you share it.
+- **Download as plain text (.txt)** or **Download as Markdown (.md)** builds the file on the server from the stored document, named after the title with path separators and unsafe characters removed. Plain text keeps one line per block and list markers; Markdown keeps headings, bold, italic, strikethrough, lists, quotes, and code, writes underline as `<u>` and highlight as `==text==`, and drops color, size, and alignment, which Markdown can't express.
+- **Copy link** copies the document's address. The link grants no access: only the owner and people it's shared with can open it.
+- **Delete…** (owner only) asks for confirmation, naming the document and warning that deletion is permanent for everyone it's shared with. The document and its shares are removed, you return to My Documents with a confirmation, and the old address shows "Document not found".
+
+Copying and downloading save pending edits first and wait for the save; if it fails, the action uses the last saved version and says so.
+
+| Action                | Owner | Editor | Viewer |
+| --------------------- | :---: | :----: | :----: |
+| Rename                |  Yes  |  Yes   |   No   |
+| Make a copy, download |  Yes  |  Yes   |   No   |
+| Copy link             |  Yes  |  Yes   |  Yes   |
+| Delete                |  Yes  |   No   |   No   |
+
+The menu only shows what your role allows, but the server checks again: `duplicateDocument`, `exportDocument`, and `deleteDocument` read your role through RLS on every call and refuse other roles, and the database's delete policy only lets the owner delete.
+
 ### Persistence and ownership
 
 - Content is stored as Tiptap JSON in `documents.content` (`jsonb`), never as HTML or plain text, and restored as-is when the document is reopened.
-- All reads and writes go through [`src/lib/data/documents.ts`](src/lib/data/documents.ts): `createDocument`, `listOwnedDocuments`, `getDocumentById`, `updateDocumentTitle`, `updateDocumentContent`. Each one verifies the user with `getClaims()`, checks the document ID is a UUID, and validates input. Listing My Documents filters by `owner_id`; opening and saving a document rely on RLS to decide who can see it, and saving first checks that the user is the owner or an editor (see [Sharing](#sharing)). Results are typed `{ ok: true, data } | { ok: false, code, error }`.
+- All reads and writes go through [`src/lib/data/documents.ts`](src/lib/data/documents.ts): `createDocument`, `importDocument`, `listOwnedDocuments`, `getDocumentById`, `updateDocumentTitle`, `updateDocumentContent`, `duplicateDocument`, `exportDocument`, `deleteDocument`. Each one verifies the user with `getClaims()`, checks the document ID is a UUID, and validates input. Listing My Documents filters by `owner_id`; opening and saving a document rely on RLS to decide who can see it, and saving first checks that the user is the owner or an editor (see [Sharing](#sharing)). Results are typed `{ ok: true, data } | { ok: false, code, error }`.
 - Content must be a JSON object with a `doc` root, use only the node and mark types the editor produces, nest at most 40 levels, and stay under 500 KB. Links are disabled in the editor and rejected on save.
 - A missing document, a malformed ID, and someone else's document all produce the same "Document not found" page, so the app never reveals whether a document exists. Database errors are logged on the server and shown to the user as a generic message.
 - Document pages are rendered per request and marked `private, no-store`; nothing user-specific is cached on the server.
@@ -197,7 +218,8 @@ Errors are shown inline in the dialog: an invalid email, an email with no Folio 
 | Open and read the document            |  Yes  |  Yes   |  Yes   |
 | Edit content and rename               |  Yes  |  Yes   |   No   |
 | Share, change permissions, or revoke  |  Yes  |   No   |   No   |
-| Delete the document (database only; no UI yet) |  Yes  |   No   |   No   |
+| Make a copy or download               |  Yes  |  Yes   |   No   |
+| Delete the document                   |  Yes  |   No   |   No   |
 | Change the document's owner           |   No  |   No   |   No   |
 
 - **Owners** keep the existing editor plus the Share button.
@@ -259,6 +281,8 @@ Vitest runs in Node with no network access or Supabase credentials:
 - [`src/lib/documents/formatting.test.ts`](src/lib/documents/formatting.test.ts) checks that colored, highlighted, resized, and aligned content survives the editor schema and the autosave round trip unchanged; that every palette value is accepted; that off-palette colors, CSS injection attempts, unbounded font sizes, unknown style attributes, and alignment on lists are rejected; that the editor won't render off-palette values; that older documents without alignment still validate; and how pasted CSS colors and sizes are normalized.
 - [`src/lib/search.test.ts`](src/lib/search.test.ts) and [`src/lib/sidebar-preference.test.ts`](src/lib/sidebar-preference.test.ts) cover the title filter (case, accents, regex characters, only the given list) and the stored sidebar preference (default, invalid values, broken storage).
 - [`src/lib/data/documents.test.ts`](src/lib/data/documents.test.ts) mocks the session and Supabase client to check that each operation uses the verified user's ID as owner, checks edit access before saving, rejects bad input without touching the database, reports expired sessions, treats rows hidden by RLS as not found, and hides database error details. The import tests also check that a successful import makes exactly one insert, and that failed validation or conversion makes none.
+  The document action tests check that a copy is inserted with the caller as owner and never touches `document_shares`; that viewers can't copy or download; that unknown download formats are refused before any query; and that delete is refused for editors and viewers, filters by both `id` and `owner_id`, and treats a document RLS hides, or a delete that removed no row, as not found.
+- [`src/lib/documents/export.test.ts`](src/lib/documents/export.test.ts) covers "Copy of" titles within the title limit, download filenames (path traversal, control and invisible characters, HTML, accents, length), plain-text and Markdown output for every block type, HTML typed as text being escaped in Markdown, and which roles may copy, download, and delete.
 - [`src/lib/import/import.test.ts`](src/lib/import/import.test.ts) covers file rules (extensions, empty and oversized files, invalid UTF-8, binary content, file-name titles) and pins the exact JSON produced for plain text and for each supported and unsupported Markdown construct, because `@tiptap/markdown` is still in beta.
 - [`src/components/editor/autosave-controller.test.ts`](src/components/editor/autosave-controller.test.ts) drives the autosave state machine with fake timers: debouncing, one save in flight with the newest content sent last, "saved" only once the latest revision is stored, failures for expired sessions, revoked access, view-only access, and database errors (edits kept, never shown as saved, Retry offered only when it can help), network failures followed by a successful retry, no saves when nothing was edited, and the final save when leaving the page.
 - [`src/lib/server-actions.test.ts`](src/lib/server-actions.test.ts) checks that every document, sharing, and auth Server Action refuses a signed-out caller before touching Supabase, that sign-out clears only Supabase auth cookies when Supabase can't be reached (without logging cookie values), and the rule that reloads the page when the signed-in user changes.
@@ -267,7 +291,7 @@ Vitest runs in Node with no network access or Supabase credentials:
 That's 209 tests in 7 files. They check the application logic only; mocked tests can't prove the live RLS policies are correct. There are two ways to check the real database:
 
 - **SQL suite.** Run [`supabase/tests/003_document_sharing_rls.sql`](supabase/tests/003_document_sharing_rls.sql) in the Supabase SQL editor (see [Applying the sharing migration](#applying-the-sharing-migration)). It tests the policies directly in Postgres and rolls back.
-- **Live API check.** [`scripts/rls-live-check.mjs`](scripts/rls-live-check.mjs) signs in as two real users with the publishable key, exactly as the app does, and runs 33 checks through the Supabase Data API: unshared, viewer, editor, revoked, and anonymous access, ownership changes, and who may manage shares. It creates one temporary document owned by the first user and deletes it at the end. Credentials come only from environment variables:
+- **Live API check.** [`scripts/rls-live-check.mjs`](scripts/rls-live-check.mjs) signs in as two real users with the publishable key, exactly as the app does, and runs 39 checks through the Supabase Data API: unshared, viewer, editor, revoked, and anonymous access, ownership changes, who may manage shares, and who may delete. It creates one temporary document owned by the first user and ends by deleting it as the owner, checking that viewers and signed-out requests can't delete it and that its shares are removed with it. Credentials come only from environment variables:
 
   ```bash
   FOLIO_OWNER_EMAIL=... FOLIO_OWNER_PASSWORD=... \
@@ -326,10 +350,13 @@ src/
     layout/                    AppShell, AppSidebar, AppHeader, FolioLogo
     documents/                 DocumentDashboard, DocumentSection, DocumentList (linked rows),
                                CreateDocumentButton, ImportFileButton, LocalDateTime, EmptyState,
-                               RefreshOnReturn (refreshes a preserved page when it's shown again)
+                               RefreshOnReturn (refreshes a preserved page when it's shown again),
+                               DocumentActionsMenu (copy, download, copy link, delete dialog)
+    feedback/NoticeProvider.tsx  Confirmation messages that survive a navigation
+    search/                    SearchProvider (per-page title query), HeaderSearch
     editor/
       DocumentEditor.tsx       Tiptap editor page: back link, title, toolbar, canvas, status
-      EditorToolbar.tsx        Formatting buttons with active states
+      EditorToolbar.tsx        Formatting controls, pickers, and the narrow-width More menu
       DocumentTitleInput.tsx   Rename on blur/Enter with validation and retry
       SaveStatusIndicator.tsx  Unsaved / Saving / Saved / Failed + Retry
       autosave-controller.ts   Debounced, serialized content autosave (framework-free, unit tested)
@@ -351,21 +378,27 @@ src/
       validation.ts            Shared credential validation
     data/
       profiles.ts              getCurrentProfile()
-      documents.ts             Document create / list / get / rename / save content, access role checks
+      documents.ts             Document create / import / list / get / rename / save / copy / export /
+                               delete, access role checks
       sharing.ts               Share, list collaborators, change role, revoke, list shared documents
       result.ts                DataResult type and safe error logging
     sharing/
-      roles.ts                 Viewer/Editor roles and email validation (shared client/server)
+      roles.ts                 Roles, what each may do, and email validation (shared client/server)
       actions.ts               Server Actions used by the Share dialog
     documents/
       actions.ts               Server Actions used by the dashboard and editor
       validation.ts            Title, content, and UUID validation (shared client/server)
+      formatting.ts            Allowed colors, highlight colors, font sizes, and alignments
+      export.ts                Copy titles, safe download names, .txt and .md output (server)
+      export-formats.ts        Download formats and MIME types (shared client/server)
     import/
       file-rules.ts            File type, size, UTF-8, and title rules (shared client/server)
       convert.ts               Plain text and Markdown → validated Tiptap JSON
       prepare-import.ts        Validates and converts an uploaded file before any insert
     account.ts                 Display name and initials helpers
     navigation.ts              Navigation items and active-route helpers
+    search.ts                  Title normalization and filtering
+    sidebar-preference.ts      Stored desktop sidebar preference
     format.ts                  Date formatting for "last edited"
   types/
     document.ts                DocumentSummary (UI-facing document shape)
@@ -394,16 +427,18 @@ vitest.config.mts              Test config (path alias, server-only stub)
 - Document creation, the Tiptap editor, renaming, and autosave (see [Documents](#documents)).
 - Importing `.txt` and `.md` files as new documents (see [Importing files](#importing-files)).
 - Sharing with viewer and editor roles, permission changes, revocation, and the Shared With Me dashboard (see [Sharing](#sharing)).
+- Document actions: make a copy, download as `.txt` or `.md`, copy link, and owner-only delete (see [Document actions](#document-actions)).
 - Typed schema, Supabase clients, and a data-access layer kept separate from UI components.
 
 ### Known limitations
 
 - Only the in-app Back link asks before leaving with unsaved changes. Sidebar links rely on the final best-effort save, and closing or reloading the tab uses the browser's prompt.
 - There is no realtime collaboration. Opening the same document in two tabs or by two people is last-write-wins across sessions; there is no conflict detection.
-- There is no version history, no comments, and no file export (PDF, DOCX, or Markdown).
+- There is no version history and no comments. Downloads are `.txt` and `.md` only (no PDF or DOCX), and Markdown can't carry colors, font sizes, or alignment.
 - After editing, going back to a dashboard shows its previous titles and order for a moment (about a tenth of a second in testing) before the refresh replaces them.
 - Signing out in another tab isn't noticed by an open tab until it next talks to the server (a navigation, save, or reload). That request is then refused and the tab goes to `/login`, or the save fails with "session expired".
-- Documents can't be deleted from the UI yet.
+- Deletion is permanent; there is no trash or undo.
+- The document actions menu is on the document page only, not on dashboard rows.
 - The editor only supports the formats listed above; links, images, tables, font families, and custom colors are not available. Pasted formatting outside the palette and size list is dropped.
 - Import accepts one `.txt` or `.md` file at a time, up to 250 KB, chosen with the file picker (no drag-and-drop). DOCX, PDF, and other formats aren't supported.
 - Markdown imports keep the text of unsupported constructs but not their structure: link and image URLs, table layout, task-list checkboxes, and H3–H6 heading styles are lost. Link reference definitions and footnote definitions aren't standard rendered text and are dropped, as in rendered Markdown.
@@ -415,6 +450,5 @@ vitest.config.mts              Test config (path alias, server-only stub)
 
 Their controls are disabled and labelled "Soon" where they appear in the UI:
 
-- Deleting documents
 - Realtime collaboration
 - Registration and password reset (users are created in the Supabase dashboard)

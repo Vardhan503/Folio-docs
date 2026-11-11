@@ -1,8 +1,12 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
   createDocument,
+  deleteDocument,
+  duplicateDocument,
+  exportDocument,
   importDocument,
   updateDocumentContent,
   updateDocumentTitle,
@@ -29,6 +33,23 @@ export async function importDocumentAction(
     return { error: result.error };
   }
   redirect(`/documents/${result.data.id}`);
+}
+
+export async function duplicateDocumentAction(documentId: string) {
+  const result = await duplicateDocument(documentId);
+  if (result.ok) revalidatePath("/");
+  return result;
+}
+
+export async function exportDocumentAction(documentId: string, format: string) {
+  return exportDocument(documentId, format);
+}
+
+export async function deleteDocumentAction(documentId: string) {
+  const result = await deleteDocument(documentId);
+  // Also drops pages kept in the client cache, so Back can't show the deleted document.
+  if (result.ok) revalidatePath("/", "layout");
+  return result;
 }
 
 export async function saveDocumentTitleAction(documentId: string, title: string) {

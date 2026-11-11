@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type Re
 import { X } from "lucide-react";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { AppSidebar } from "@/components/layout/AppSidebar";
+import { NoticeProvider } from "@/components/feedback/NoticeProvider";
 import { SearchProvider } from "@/components/search/SearchProvider";
 import {
   readSidebarCollapsed,
@@ -60,68 +61,70 @@ export function AppShell({ workspaceName, account, children }: AppShellProps) {
 
   return (
     <SearchProvider>
-      <div className="flex min-h-dvh">
-        <a
-          href="#main-content"
-          inert={isNavigationOpen}
-          className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-lg focus:bg-surface focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:shadow-md focus:outline-2 focus:outline-accent"
-        >
-          Skip to content
-        </a>
+      <NoticeProvider>
+        <div className="flex min-h-dvh">
+          <a
+            href="#main-content"
+            inert={isNavigationOpen}
+            className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-lg focus:bg-surface focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:shadow-md focus:outline-2 focus:outline-accent"
+          >
+            Skip to content
+          </a>
 
-        <aside
-          id="desktop-sidebar"
-          aria-label="Sidebar"
-          className={`sticky top-0 hidden h-dvh w-64 shrink-0 border-r border-line bg-surface ${
-            isSidebarCollapsed ? "" : "lg:block"
-          }`}
-        >
-          <AppSidebar />
-        </aside>
+          <aside
+            id="desktop-sidebar"
+            aria-label="Sidebar"
+            className={`sticky top-0 hidden h-dvh w-64 shrink-0 border-r border-line bg-surface ${
+              isSidebarCollapsed ? "" : "lg:block"
+            }`}
+          >
+            <AppSidebar />
+          </aside>
 
-        {isNavigationOpen ? (
-          <div className="fixed inset-0 z-40 lg:hidden">
-            <div
-              aria-hidden="true"
-              onClick={closeNavigation}
-              className="absolute inset-0 bg-ink/30"
-            />
-            <div
-              id="mobile-navigation"
-              role="dialog"
-              aria-modal="true"
-              aria-label="Navigation"
-              className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col border-r border-line bg-surface shadow-xl"
-            >
-              <button
-                ref={closeButtonRef}
-                type="button"
+          {isNavigationOpen ? (
+            <div className="fixed inset-0 z-40 lg:hidden">
+              <div
+                aria-hidden="true"
                 onClick={closeNavigation}
-                aria-label="Close navigation"
-                className="absolute top-4 right-3 inline-flex size-8 items-center justify-center rounded-lg text-ink-muted hover:bg-black/[0.04] hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                className="absolute inset-0 bg-ink/30"
+              />
+              <div
+                id="mobile-navigation"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Navigation"
+                className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col border-r border-line bg-surface shadow-xl"
               >
-                <X aria-hidden="true" className="size-4" />
-              </button>
-              <AppSidebar onNavigate={() => setIsNavigationOpen(false)} />
+                <button
+                  ref={closeButtonRef}
+                  type="button"
+                  onClick={closeNavigation}
+                  aria-label="Close navigation"
+                  className="absolute top-4 right-3 inline-flex size-8 items-center justify-center rounded-lg text-ink-muted hover:bg-black/[0.04] hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                >
+                  <X aria-hidden="true" className="size-4" />
+                </button>
+                <AppSidebar onNavigate={() => setIsNavigationOpen(false)} />
+              </div>
             </div>
-          </div>
-        ) : null}
+          ) : null}
 
-        <div className="flex min-w-0 flex-1 flex-col" inert={isNavigationOpen}>
-          <AppHeader
-            workspaceName={workspaceName}
-            account={account}
-            onOpenNavigation={openNavigation}
-            isNavigationOpen={isNavigationOpen}
-            menuButtonRef={menuButtonRef}
-            isSidebarCollapsed={isSidebarCollapsed}
-            onToggleSidebar={toggleSidebar}
-          />
-          <main id="main-content" tabIndex={-1} className="flex-1 focus:outline-none">
-            {children}
-          </main>
+          <div className="flex min-w-0 flex-1 flex-col" inert={isNavigationOpen}>
+            <AppHeader
+              workspaceName={workspaceName}
+              account={account}
+              onOpenNavigation={openNavigation}
+              isNavigationOpen={isNavigationOpen}
+              menuButtonRef={menuButtonRef}
+              isSidebarCollapsed={isSidebarCollapsed}
+              onToggleSidebar={toggleSidebar}
+            />
+            <main id="main-content" tabIndex={-1} className="flex-1 focus:outline-none">
+              {children}
+            </main>
+          </div>
         </div>
-      </div>
+      </NoticeProvider>
     </SearchProvider>
   );
 }

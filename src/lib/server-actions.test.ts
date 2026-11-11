@@ -60,6 +60,9 @@ describe("server action surface", () => {
   it("exposes only the intended document and sharing actions", () => {
     expect(Object.keys(documentActions).sort()).toEqual([
       "createDocumentAction",
+      "deleteDocumentAction",
+      "duplicateDocumentAction",
+      "exportDocumentAction",
       "importDocumentAction",
       "saveDocumentContentAction",
       "saveDocumentTitleAction",
@@ -81,6 +84,9 @@ describe("server action surface", () => {
     ["createDocumentAction", () => documentActions.createDocumentAction()],
     ["importDocumentAction", () => documentActions.importDocumentAction({ error: null }, formData)],
     ["saveDocumentTitleAction", () => documentActions.saveDocumentTitleAction(DOCUMENT_ID, "Title")],
+    ["duplicateDocumentAction", () => documentActions.duplicateDocumentAction(DOCUMENT_ID)],
+    ["exportDocumentAction", () => documentActions.exportDocumentAction(DOCUMENT_ID, "md")],
+    ["deleteDocumentAction", () => documentActions.deleteDocumentAction(DOCUMENT_ID)],
     [
       "saveDocumentContentAction",
       () => documentActions.saveDocumentContentAction(DOCUMENT_ID, '{"type":"doc","content":[]}'),

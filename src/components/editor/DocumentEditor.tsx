@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   EditorContent,
@@ -9,6 +9,7 @@ import {
   type JSONContent,
 } from "@tiptap/react";
 import { AlertCircle, ArrowLeft, Eye, PencilLine } from "lucide-react";
+import { DocumentActionsMenu } from "@/components/documents/DocumentActionsMenu";
 import { DocumentTitleInput } from "@/components/editor/DocumentTitleInput";
 import { EditorToolbar } from "@/components/editor/EditorToolbar";
 import { createEditorExtensions } from "@/components/editor/extensions";
@@ -46,8 +47,17 @@ export function DocumentEditor({
     return current.getJSON();
   }, []);
 
-  const { status, error, retryable, lastSavedAt, hasUnsavedChanges, markDirty, saveNow } =
-    useAutosave({ documentId, initialSavedAt: initialUpdatedAt, getContent });
+  const [savedTitle, setSavedTitle] = useState(initialTitle);
+  const {
+    status,
+    error,
+    retryable,
+    lastSavedAt,
+    hasUnsavedChanges,
+    markDirty,
+    saveNow,
+    saveAndConfirm,
+  } = useAutosave({ documentId, initialSavedAt: initialUpdatedAt, getContent });
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -117,6 +127,19 @@ export function DocumentEditor({
             <AccessBadge icon={Eye} label="View only" />
           ) : null}
           {isOwner ? <ShareButton documentId={documentId} /> : null}
+          <DocumentActionsMenu
+            documentId={documentId}
+            title={savedTitle}
+            role={role}
+            saveFirst={saveAndConfirm}
+            onRename={() => {
+              const input = document.getElementById("document-title");
+              if (input instanceof HTMLInputElement) {
+                input.focus();
+                input.select();
+              }
+            }}
+          />
         </div>
       </div>
 
@@ -125,6 +148,7 @@ export function DocumentEditor({
           documentId={documentId}
           initialTitle={initialTitle}
           readOnly={!isEditable}
+          onSaved={setSavedTitle}
         />
       </div>
 
