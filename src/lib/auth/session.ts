@@ -9,20 +9,32 @@ export type AuthenticatedUser = {
 };
 
 /**
- * Returns the signed-in user from a verified access token, or redirects to
- * /login. Deduplicated per request.
+ * Returns the signed-in user from a verified access token, or null. Use this in
+ * mutations that must report an expired session instead of redirecting.
+ * Deduplicated per request.
  */
-export const getCurrentUser = cache(async (): Promise<AuthenticatedUser> => {
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.getClaims();
-  const claims = data?.claims;
+export const getOptionalUser = cache(
+  async (): Promise<AuthenticatedUser | null> => {
+    const supabase = await createClient();
+    const { data, error } = await supabase.auth.getClaims();
+    const claims = data?.claims;
 
-  if (error || !claims?.sub) {
+    if (error || !claims?.sub) {
+      return null;
+    }
+
+    return {
+      id: claims.sub,
+      email: typeof claims.email === "string" ? claims.email : null,
+    };
+  },
+);
+
+/** Returns the signed-in user, or redirects to /login. */
+export async function getCurrentUser(): Promise<AuthenticatedUser> {
+  const user = await getOptionalUser();
+  if (!user) {
     redirect("/login");
   }
-
-  return {
-    id: claims.sub,
-    email: typeof claims.email === "string" ? claims.email : null,
-  };
-});
+  return user;
+}

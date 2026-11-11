@@ -1,5 +1,6 @@
 import "server-only";
 import { cookies } from "next/headers";
+import { connection } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import type { Database } from "@/lib/supabase/database.types";
 import { getSupabaseEnv } from "@/lib/supabase/env";
@@ -9,6 +10,9 @@ import { getSupabaseEnv } from "@/lib/supabase/env";
  * Create a new client per request; never share one across requests.
  */
 export async function createClient() {
+  // Supabase Auth reads Date.now() to check token expiry. cookies() alone still
+  // allows a per-session prerender, so wait for the real request first.
+  await connection();
   const cookieStore = await cookies();
   const { url, publishableKey } = getSupabaseEnv();
 

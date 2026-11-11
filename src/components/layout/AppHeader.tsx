@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode, Ref } from "react";
+import { Suspense, type ReactNode, type Ref } from "react";
 import { usePathname } from "next/navigation";
 import { ChevronRight, Menu, Search } from "lucide-react";
 import { getPageTitle } from "@/lib/navigation";
@@ -21,9 +21,6 @@ export function AppHeader({
   isNavigationOpen,
   menuButtonRef,
 }: AppHeaderProps) {
-  const pathname = usePathname();
-  const pageTitle = getPageTitle(pathname);
-
   return (
     <header className="sticky top-0 z-20 border-b border-line bg-surface/90 backdrop-blur supports-[backdrop-filter]:bg-surface/75">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-3 px-4 py-3 sm:flex-nowrap sm:px-6 lg:px-8">
@@ -51,7 +48,9 @@ export function AppHeader({
               aria-current="page"
               className="truncate font-medium text-ink"
             >
-              {pageTitle}
+              <Suspense fallback={null}>
+                <PageTitle />
+              </Suspense>
             </li>
           </ol>
         </nav>
@@ -86,4 +85,9 @@ export function AppHeader({
       </div>
     </header>
   );
+}
+
+function PageTitle() {
+  const pathname = usePathname();
+  return getPageTitle(pathname);
 }

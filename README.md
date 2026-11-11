@@ -6,8 +6,9 @@ This repository currently contains:
 
 - **Task 1:** the application shell and document dashboard.
 - **Task 2:** Supabase email/password authentication, route protection, and the database foundation (schema, row-level security, typed data access).
+- **Task 3:** creating documents, rich-text editing with Tiptap, renaming, autosave, and reopening saved documents.
 
-Document editing, creating documents, and sharing are not implemented yet.
+File import and sharing are not implemented yet.
 
 ## Tech stack
 
@@ -34,6 +35,8 @@ In the Supabase dashboard, open **SQL Editor** and run the contents of
 (With the Supabase CLI linked to your project, `npx supabase db push` does the same.)
 
 This creates the `profiles`, `documents`, and `document_shares` tables, a trigger that creates a profile for every new Auth user, and the row-level security policies.
+
+Then run [`supabase/migrations/002_document_constraints.sql`](supabase/migrations/002_document_constraints.sql). It adds check constraints so the database itself rejects empty or overlong titles (1–120 characters) and content that isn't a Tiptap `doc`. The app validates the same rules first, so it works without this migration, but it is recommended.
 
 ### 3. Configure environment variables
 
@@ -74,14 +77,58 @@ Open [http://localhost:3000](http://localhost:3000). You will be redirected to `
 | `npm run dev`      | Start the dev server       |
 | `npm run lint`     | Run ESLint                 |
 | `npx tsc --noEmit` | Type-check the project     |
+| `npm run test`     | Run Vitest in watch mode   |
+| `npm run test -- --run` | Run the tests once (CI) |
 | `npm run build`    | Create a production build  |
 | `npm start`        | Serve the production build |
+
+## Documents
+
+### Creating documents
+
+**Create Document** on My Documents calls a Server Action that verifies the session, inserts a row with `owner_id` taken from the verified user (never from the browser), the title "Untitled document", and an empty Tiptap document, then navigates to `/documents/<id>`. The button is disabled while the request runs, and repeat submissions are ignored, so a double click creates one document. Failures show an inline error.
+
+### Editing and formatting
+
+The editor at `/documents/[documentId]` uses Tiptap v3 (`StarterKit` plus `Placeholder`). The toolbar offers undo/redo, normal text, Heading 1, Heading 2, bold, italic, underline, bulleted and numbered lists, and shows which formats are active. Toolbar buttons keep the text selection, and the usual shortcuts work (`Ctrl/⌘+B`, `I`, `U`, `Z`, `Shift+Z`, `Ctrl/⌘+Alt+1/2/0`, `Ctrl/⌘+Shift+7/8`). Markdown-style input such as `# `, `- `, and `1. ` also works.
+
+Click the title to rename it. It saves when the field loses focus or you press Enter (Escape cancels). Titles are trimmed and must be 1–120 characters; an empty title is rejected and the previous one kept. If a rename fails, the typed title stays in the field with a Retry button.
+
+### Autosave
+
+- Every edit bumps a local revision number and restarts a 900 ms debounce timer, so typing doesn't hit the database on every keystroke.
+- When the timer fires, the editor's JSON (`editor.getJSON()`) is sent to a Server Action. Only one content save is in flight at a time; edits made meanwhile are sent in a follow-up save with the latest content, so an older save can never overwrite a newer one.
+- The status reads **Unsaved changes**, **Saving…**, **All changes saved** (with the last save time), or **Save failed**. "All changes saved" only appears once the latest revision has been stored.
+- On failure, edits stay in the editor, a Retry button appears, and the next edit retries automatically. `Ctrl/⌘+S` saves immediately.
+- Leaving with unsaved changes triggers the browser's "leave page?" prompt; the in-app Back link asks for confirmation. If you navigate away inside the app, a final best-effort save is sent.
+- Title and content are saved by separate actions that update separate columns, so renaming never overwrites content and vice versa.
+
+### Persistence and ownership
+
+- Content is stored as Tiptap JSON in `documents.content` (`jsonb`), never as HTML or plain text, and restored as-is when the document is reopened.
+- All reads and writes go through [`src/lib/data/documents.ts`](src/lib/data/documents.ts): `createDocument`, `listOwnedDocuments`, `getDocumentById`, `updateDocumentTitle`, `updateDocumentContent`. Each one verifies the user with `getClaims()`, checks the document ID is a UUID, validates input, and filters by both `id` and `owner_id` on top of the RLS policies. Results are typed `{ ok: true, data } | { ok: false, code, error }`.
+- Content must be a JSON object with a `doc` root, use only the node and mark types the editor produces, nest at most 40 levels, and stay under 500 KB. Links are disabled in the editor and rejected on save.
+- A missing document, a malformed ID, and someone else's document all produce the same "Document not found" page, so the app never reveals whether a document exists. Database errors are logged on the server and shown to the user as a generic message.
+- Document pages are rendered per request and marked `private, no-store`; nothing user-specific is cached on the server.
+
+## Tests
+
+```bash
+npm run test -- --run
+```
+
+Vitest runs in Node with no network access or Supabase credentials:
+
+- [`src/lib/documents/validation.test.ts`](src/lib/documents/validation.test.ts) covers title rules (valid, trimmed, empty, whitespace-only, overlong, non-string), content rules (valid documents, malformed roots and nodes, unsupported nodes and marks, heading levels, deep nesting, oversized and circular content), and UUID checks.
+- [`src/lib/data/documents.test.ts`](src/lib/data/documents.test.ts) mocks the session and Supabase client to check that each operation uses the verified user's ID as owner, filters by owner, rejects bad input without touching the database, reports expired sessions, treats rows hidden by RLS as not found, and hides database error details.
+
+These tests check the application logic only. They do **not** verify the live RLS policies; check those manually with two users (see below).
 
 ## How authentication works
 
 - **Sessions live in cookies.** `@supabase/ssr` stores the Supabase session in cookies so both the browser and the server can read it.
 - **The proxy refreshes and gates every request.** [`src/proxy.ts`](src/proxy.ts) (the Next.js 16 replacement for `middleware.ts`) calls `updateSession` in [`src/lib/supabase/proxy.ts`](src/lib/supabase/proxy.ts). It runs `supabase.auth.getClaims()`, which refreshes an expired access token and verifies its signature, then writes any refreshed cookies to the response. Requests without a verified user are redirected to `/login`; signed-in users who visit `/login` are redirected to `/`. Responses are marked `Cache-Control: private, no-store` so no shared cache stores a user's page or session cookies.
-- **The server re-verifies before reading data.** The proxy is not the only check. [`getCurrentUser()`](src/lib/auth/session.ts) verifies the token again with `getClaims()` (never trusting an unverified `getSession()`), and every data-access function calls it before querying. If verification fails it redirects to `/login`.
+- **The server re-verifies before reading data.** The proxy is not the only check. [`getCurrentUser()`](src/lib/auth/session.ts) verifies the token again with `getClaims()` (never trusting an unverified `getSession()`), and every data-access function calls it before querying. If verification fails, page loads redirect to `/login`, while mutations such as autosave use `getOptionalUser()` and return an `unauthenticated` error instead, so unsaved edits aren't lost to a redirect.
 - **Sign-in and sign-out are Server Actions** in [`src/lib/auth/actions.ts`](src/lib/auth/actions.ts). Sign-in validates input on both client and server, calls `signInWithPassword`, and maps Supabase errors to plain messages. Passwords and tokens are never logged or returned to the client.
 - **Personal content is never cached across users.** With Cache Components, the user's name and document list are read at request time inside `<Suspense>` boundaries; only the generic page shell is prerendered.
 
@@ -109,12 +156,23 @@ src/
       layout.tsx               App shell; streams the signed-in account into the header
       page.tsx                 "/"        My Documents (loads the user's documents)
       shared/page.tsx          "/shared"  Shared With Me
+      documents/[documentId]/
+        page.tsx               Loads an owned document and renders the editor
+        not-found.tsx          Shared "not found or no access" page
       _components/
         WorkspaceAccount.tsx   Loads the profile and renders the account menu
   components/
     account/AccountMenu.tsx    Initials avatar, name/email, Sign out
     layout/                    AppShell, AppSidebar, AppHeader, FolioLogo
-    documents/                 DocumentDashboard, DocumentSection, DocumentList, EmptyState
+    documents/                 DocumentDashboard, DocumentSection, DocumentList (linked rows),
+                               CreateDocumentButton, LocalDateTime, EmptyState
+    editor/
+      DocumentEditor.tsx       Tiptap editor page: back link, title, toolbar, canvas, status
+      EditorToolbar.tsx        Formatting buttons with active states
+      DocumentTitleInput.tsx   Rename on blur/Enter with validation and retry
+      SaveStatusIndicator.tsx  Unsaved / Saving / Saved / Failed + Retry
+      useAutosave.ts           Debounced, serialized content autosave
+      DocumentEditorStates.tsx Loading skeleton and message states
   lib/
     supabase/
       client.ts                Browser client
@@ -128,8 +186,11 @@ src/
       validation.ts            Shared credential validation
     data/
       profiles.ts              getCurrentProfile()
-      documents.ts             listOwnedDocuments()
+      documents.ts             Document create / list / get / rename / save content
       result.ts                DataResult type and safe error logging
+    documents/
+      actions.ts               Server Actions used by the dashboard and editor
+      validation.ts            Title, content, and UUID validation (shared client/server)
     account.ts                 Display name and initials helpers
     navigation.ts              Navigation items and active-route helpers
     format.ts                  Date formatting for "last edited"
@@ -137,6 +198,8 @@ src/
     document.ts                DocumentSummary (UI-facing document shape)
 supabase/
   migrations/001_initial_schema.sql
+  migrations/002_document_constraints.sql
+vitest.config.mts              Test config (path alias, server-only stub)
 ```
 
 `database.types.ts` is maintained by hand to match the migration. With the Supabase CLI you can regenerate it with `npx supabase gen types typescript --project-id <ref>`.
@@ -149,14 +212,23 @@ supabase/
 - Email/password sign-in at `/login` with client and server validation, a loading state, and clear error messages.
 - Route protection: every page except `/login` requires a verified session; signed-in users are sent from `/login` to `/`.
 - Header account menu showing the signed-in user's name, email, and initials, with a working **Sign out**.
-- **My Documents** loads the user's real documents from Supabase (none exist yet, so it shows the empty state). Load failures show an error message instead of a misleading empty list. A missing profile falls back to the email address.
+- **My Documents** lists the user's real documents, most recently edited first, each linking to the editor. With no documents it shows the empty state; load failures show an error message instead of a misleading empty list. A missing profile falls back to the email address.
+- Document creation, the Tiptap editor, renaming, and autosave (see [Documents](#documents)).
 - Typed schema, Supabase clients, and a data-access layer kept separate from UI components.
+
+### Known limitations
+
+- Only the in-app Back link asks before leaving with unsaved changes. Sidebar links rely on the final best-effort save, and closing or reloading the tab uses the browser's prompt.
+- Opening the same document in two tabs is last-write-wins; there is no realtime sync or conflict detection.
+- After editing, using the browser's Back button may briefly show the dashboard's previous titles and order until the page is reloaded or revisited.
+- Documents can't be deleted from the UI yet.
+- The editor only supports the formats listed above; links, images, and tables are not available.
 
 ### Not implemented yet
 
 Their controls are disabled and labelled "Soon" where they appear in the UI:
 
-- Creating, editing, and deleting documents (rich-text editor)
+- Deleting documents
 - File import / upload
 - Document search
 - Sharing UI and reading documents shared with you

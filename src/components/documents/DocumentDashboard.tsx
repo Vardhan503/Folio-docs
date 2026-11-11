@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { FilePlus, FileText, Inbox, Upload, Users } from "lucide-react";
+import { FileText, Inbox, Upload, Users } from "lucide-react";
+import { CreateDocumentButton } from "@/components/documents/CreateDocumentButton";
 import { DocumentSection } from "@/components/documents/DocumentSection";
 import { EmptyState } from "@/components/documents/EmptyState";
 import type { DocumentSummary } from "@/types/document";
@@ -53,20 +54,15 @@ export function DocumentDashboard({
 
         {showOwned ? (
           <div className="flex shrink-0 flex-col gap-2 md:items-end">
-            <div className="flex flex-wrap gap-2 md:flex-nowrap">
+            <div className="flex flex-wrap gap-2 md:justify-end">
               <UpcomingActionButton
                 icon={<Upload aria-hidden="true" className="size-4" />}
                 label="Import File"
-                variant="secondary"
               />
-              <UpcomingActionButton
-                icon={<FilePlus aria-hidden="true" className="size-4" />}
-                label="Create Document"
-                variant="primary"
-              />
+              <CreateDocumentButton />
             </div>
             <p id={UPCOMING_ACTIONS_NOTE_ID} className="text-xs text-ink-subtle">
-              Creating and importing documents are coming soon.
+              File import is coming soon.
             </p>
           </div>
         ) : null}
@@ -87,7 +83,7 @@ export function DocumentDashboard({
               <EmptyState
                 icon={FileText}
                 title="No documents yet"
-                description="When you create or import a document, it will appear here with its title, owner, and when it was last edited."
+                description="Create your first document to get started. It will appear here with its title, owner, and when it was last edited."
               />
             }
           />
@@ -117,29 +113,19 @@ export function DocumentDashboard({
 type UpcomingActionButtonProps = {
   icon: ReactNode;
   label: string;
-  variant: "primary" | "secondary";
 };
 
-function UpcomingActionButton({ icon, label, variant }: UpcomingActionButtonProps) {
-  const variantStyles =
-    variant === "primary"
-      ? "bg-accent text-white disabled:bg-accent/55"
-      : "border border-line-strong bg-surface text-ink disabled:text-ink-muted";
-
+function UpcomingActionButton({ icon, label }: UpcomingActionButtonProps) {
   return (
     <button
       type="button"
       disabled
       aria-describedby={UPCOMING_ACTIONS_NOTE_ID}
-      className={`inline-flex h-9 items-center gap-2 rounded-lg px-3.5 text-sm font-medium shadow-sm disabled:cursor-not-allowed ${variantStyles}`}
+      className="inline-flex h-9 items-center gap-2 rounded-lg border border-line-strong bg-surface px-3.5 text-sm font-medium text-ink shadow-sm disabled:cursor-not-allowed disabled:text-ink-muted"
     >
       {icon}
       {label}
-      <span
-        className={`rounded px-1.5 py-px text-[10px] font-semibold tracking-wide uppercase ${
-          variant === "primary" ? "bg-white/20 text-white" : "bg-canvas text-ink-subtle"
-        }`}
-      >
+      <span className="rounded bg-canvas px-1.5 py-px text-[10px] font-semibold tracking-wide text-ink-subtle uppercase">
         Soon
       </span>
     </button>

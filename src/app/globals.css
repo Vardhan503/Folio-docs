@@ -26,3 +26,106 @@ body {
   background: var(--color-canvas);
   color: var(--color-ink);
 }
+
+/* Document writing canvas (Tiptap / ProseMirror). */
+.folio-editor {
+  min-height: 60vh;
+  padding: 2.5rem 1.5rem;
+  font-size: 1rem;
+  line-height: 1.7;
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+  outline: none;
+}
+
+@media (min-width: 640px) {
+  .folio-editor {
+    padding: 3.5rem 4rem;
+  }
+}
+
+.folio-editor > * + * {
+  margin-top: 0.75em;
+}
+
+.folio-editor h1 {
+  margin-top: 1.4em;
+  font-size: 1.875rem;
+  line-height: 1.25;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+}
+
+.folio-editor h2 {
+  margin-top: 1.3em;
+  font-size: 1.375rem;
+  line-height: 1.35;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.folio-editor > h1:first-child,
+.folio-editor > h2:first-child {
+  margin-top: 0;
+}
+
+.folio-editor ul,
+.folio-editor ol {
+  padding-left: 1.5rem;
+}
+
+.folio-editor ul {
+  list-style: disc;
+}
+
+.folio-editor ol {
+  list-style: decimal;
+}
+
+.folio-editor li + li,
+.folio-editor li > * + * {
+  margin-top: 0.25em;
+}
+
+.folio-editor ul ul {
+  list-style: circle;
+}
+
+.folio-editor blockquote {
+  border-left: 3px solid var(--color-line-strong);
+  padding-left: 1rem;
+  color: var(--color-ink-muted);
+}
+
+.folio-editor code {
+  border-radius: 0.25rem;
+  background: var(--color-canvas);
+  padding: 0.1em 0.3em;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.folio-editor pre {
+  overflow-x: auto;
+  border-radius: 0.5rem;
+  background: var(--color-canvas);
+  padding: 0.75rem 1rem;
+}
+
+.folio-editor pre code {
+  background: none;
+  padding: 0;
+}
+
+.folio-editor hr {
+  border-color: var(--color-line);
+  margin: 1.5em 0;
+}
+
+.folio-editor p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--color-ink-subtle);
+  pointer-events: none;
+}
