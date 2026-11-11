@@ -9,9 +9,14 @@ type DocumentSectionProps = {
   description: string;
   icon: LucideIcon;
   tone: "owned" | "shared";
+  /** The documents to show, already filtered by any search. */
   documents: DocumentSummary[];
+  /** How many documents the section has before filtering. */
+  totalCount?: number;
   /** Rendered in place of the list when there are no documents. */
   emptyState: ReactNode;
+  /** Rendered when a search hides every document in the section. */
+  noResults?: ReactNode;
   /** Shown instead of the list or empty state when documents failed to load. */
   errorMessage?: string | null;
   isLoading?: boolean;
@@ -29,12 +34,15 @@ export function DocumentSection({
   icon: Icon,
   tone,
   documents,
+  totalCount = documents.length,
   emptyState,
+  noResults,
   errorMessage,
   isLoading = false,
 }: DocumentSectionProps) {
   const headingId = `${id}-heading`;
   const hasDocuments = documents.length > 0;
+  const isFiltered = totalCount !== documents.length;
 
   return (
     <section
@@ -55,9 +63,9 @@ export function DocumentSection({
             </h2>
             {isLoading || errorMessage ? null : (
               <span className="rounded-full bg-canvas px-2 py-0.5 text-[11px] font-medium text-ink-muted tabular-nums">
-                {documents.length}
+                {isFiltered ? `${documents.length} of ${totalCount}` : documents.length}
                 <span className="sr-only">
-                  {documents.length === 1 ? " document" : " documents"}
+                  {totalCount === 1 ? " document" : " documents"}
                 </span>
               </span>
             )}
@@ -89,6 +97,8 @@ export function DocumentSection({
         </div>
       ) : hasDocuments ? (
         <DocumentList documents={documents} label={title} />
+      ) : totalCount > 0 && noResults ? (
+        noResults
       ) : (
         emptyState
       )}

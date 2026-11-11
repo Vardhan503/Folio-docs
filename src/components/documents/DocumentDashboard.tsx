@@ -1,10 +1,14 @@
-import { FileText, Inbox, Users } from "lucide-react";
+"use client";
+
+import { FileText, Inbox, SearchX, Users } from "lucide-react";
 import { CreateDocumentButton } from "@/components/documents/CreateDocumentButton";
 import { DocumentSection } from "@/components/documents/DocumentSection";
 import { EmptyState } from "@/components/documents/EmptyState";
 import { ImportFileButton } from "@/components/documents/ImportFileButton";
 import { RefreshOnReturn } from "@/components/documents/RefreshOnReturn";
+import { useSearch, useSearchQuery } from "@/components/search/SearchProvider";
 import { IMPORT_FORMATS_HINT } from "@/lib/import/file-rules";
+import { filterByTitle } from "@/lib/search";
 import type { DocumentSummary } from "@/types/document";
 
 export type DashboardView = "my-documents" | "shared";
@@ -44,6 +48,35 @@ export function DocumentDashboard({
 }: DocumentDashboardProps) {
   const copy = viewCopy[view];
   const showOwned = view === "my-documents";
+  const scope = view === "shared" ? "/shared" : "/";
+  const query = useSearchQuery(scope);
+  const { setSearch } = useSearch();
+  const isSearching = !isLoading && query.trim() !== "";
+  const visibleOwned = filterByTitle(ownedDocuments, query);
+  const visibleShared = filterByTitle(sharedDocuments, query);
+  const matchCount = (showOwned ? visibleOwned.length : 0) + visibleShared.length;
+
+  function clearSearch() {
+    setSearch({ scope, query: "" });
+    document.getElementById("document-search")?.focus();
+  }
+
+  const noResults = (
+    <EmptyState
+      icon={SearchX}
+      size="compact"
+      title="No matching documents"
+      description={`No titles in this list contain “${query.trim()}”.`}
+    >
+      <button
+        type="button"
+        onClick={clearSearch}
+        className="rounded-lg border border-line-strong bg-surface px-3 py-1.5 text-sm font-medium text-ink hover:bg-canvas focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      >
+        Clear search
+      </button>
+    </EmptyState>
+  );
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
@@ -71,7 +104,13 @@ export function DocumentDashboard({
         ) : null}
       </div>
 
-      <div className="mt-8 flex flex-col gap-6">
+      <p role="status" className={isSearching ? "mt-6 text-sm text-ink-muted" : "sr-only"}>
+        {isSearching
+          ? `${matchCount} ${matchCount === 1 ? "document matches" : "documents match"} “${query.trim()}”.`
+          : null}
+      </p>
+
+      <div className={`${isSearching ? "mt-4" : "mt-8"} flex flex-col gap-6`}>
         {showOwned ? (
           <DocumentSection
             id="owned-documents"
@@ -79,7 +118,9 @@ export function DocumentDashboard({
             description="Documents you create or import."
             icon={FileText}
             tone="owned"
-            documents={ownedDocuments}
+            documents={visibleOwned}
+            totalCount={ownedDocuments.length}
+            noResults={noResults}
             errorMessage={ownedLoadError}
             isLoading={isLoading}
             emptyState={
@@ -107,7 +148,9 @@ export function DocumentDashboard({
           description="Documents owned by other people that you can access."
           icon={Users}
           tone="shared"
-          documents={sharedDocuments}
+          documents={visibleShared}
+          totalCount={sharedDocuments.length}
+          noResults={noResults}
           errorMessage={sharedLoadError}
           isLoading={isLoading}
           emptyState={

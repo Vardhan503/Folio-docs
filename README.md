@@ -372,7 +372,8 @@ vitest.config.mts              Test config (path alias, server-only stub)
 
 ### Done
 
-- Responsive app shell with a desktop sidebar and a mobile navigation drawer.
+- Responsive app shell with a mobile navigation drawer and a desktop sidebar that can be hidden with the button at the left of the header (the choice is remembered in this browser).
+- Title search in the header. On My Documents it filters both lists, on Shared With Me the shared list; on a document page, Enter opens My Documents with the search applied. Matching ignores case and accents, `/` focuses the field, and Escape clears it. Search only filters the documents the page has already loaded for you, so it never reaches documents you can't open and needs no extra database query.
 - Email/password sign-in at `/login` with client and server validation, a loading state, and clear error messages.
 - Route protection: every page except `/login` requires a verified session; signed-in users are sent from `/login` to `/`.
 - Header account menu showing the signed-in user's name, email, and initials, with a working **Sign out**.
@@ -402,6 +403,5 @@ vitest.config.mts              Test config (path alias, server-only stub)
 Their controls are disabled and labelled "Soon" where they appear in the UI:
 
 - Deleting documents
-- Document search
 - Realtime collaboration
 - Registration and password reset (users are created in the Supabase dashboard)
