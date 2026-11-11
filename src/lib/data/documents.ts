@@ -13,6 +13,7 @@ import {
   parseDocumentContent,
   validateTitle,
 } from "@/lib/documents/validation";
+import { prepareImport } from "@/lib/import/prepare-import";
 import type { DocumentRow } from "@/lib/supabase/database.types";
 import { createClient } from "@/lib/supabase/server";
 import type { DocumentSummary } from "@/types/document";
@@ -86,6 +87,39 @@ export async function createDocument(): Promise<DataResult<{ id: string }>> {
       "createDocument",
       error,
       "We couldn't create a document. Please try again.",
+    );
+  }
+
+  return success({ id: data.id });
+}
+
+/**
+ * Creates a document from an uploaded .txt or .md file. The file is validated
+ * and converted before the single insert; the raw file is never stored.
+ */
+export async function importDocument(file: unknown): Promise<DataResult<{ id: string }>> {
+  const user = await getOptionalUser();
+  if (!user) return rejected("unauthenticated", SESSION_EXPIRED_MESSAGE);
+
+  const prepared = await prepareImport(file);
+  if (!prepared.ok) return rejected("invalid_input", prepared.error);
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("documents")
+    .insert({
+      owner_id: user.id,
+      title: prepared.value.title,
+      content: prepared.value.content,
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    return failure(
+      "importDocument",
+      error,
+      "We couldn't import this file. Please try again.",
     );
   }
 

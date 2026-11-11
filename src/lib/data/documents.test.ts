@@ -3,6 +3,7 @@ import type { AuthenticatedUser } from "@/lib/auth/session";
 import {
   createDocument,
   getDocumentById,
+  importDocument,
   updateDocumentContent,
   updateDocumentTitle,
 } from "@/lib/data/documents";
@@ -256,5 +257,99 @@ describe("updateDocumentContent", () => {
       code: "server_error",
       error: "We couldn't save your changes.",
     });
+  });
+});
+
+describe("importDocument", () => {
+  function file(contents: string, name: string) {
+    return new File([contents], name, { type: "text/plain" });
+  }
+
+  it("inserts one converted document owned by the verified user", async () => {
+    db.response = { data: { id: DOCUMENT_ID }, error: null };
+
+    const result = await importDocument(file("# Plan\n\nShip **it**", "project-plan.md"));
+
+    expect(result).toEqual({ ok: true, data: { id: DOCUMENT_ID } });
+    expect(callsTo("from")).toEqual([["documents"]]);
+    expect(callsTo("insert")).toEqual([
+      [
+        {
+          owner_id: USER.id,
+          title: "project-plan",
+          content: {
+            type: "doc",
+            content: [
+              { type: "heading", attrs: { level: 1 }, content: [{ type: "text", text: "Plan" }] },
+              {
+                type: "paragraph",
+                content: [
+                  { type: "text", text: "Ship " },
+                  { type: "text", text: "it", marks: [{ type: "bold" }] },
+                ],
+              },
+            ],
+          },
+        },
+      ],
+    ]);
+    expect(callsTo("update")).toEqual([]);
+  });
+
+  it("takes owner_id from the session, never from the upload", async () => {
+    db.response = { data: { id: DOCUMENT_ID }, error: null };
+    const forged = file('{"owner_id":"33333333-3333-4333-8333-333333333333"}', "owner_id.txt");
+
+    await importDocument(forged);
+
+    const [[row]] = callsTo("insert") as [[{ owner_id: string; title: string }]];
+    expect(row.owner_id).toBe(USER.id);
+    expect(row.title).toBe("owner_id");
+  });
+
+  it("refuses to import without a session", async () => {
+    session.user = null;
+
+    const result = await importDocument(file("Hello", "notes.txt"));
+
+    expect(result).toMatchObject({ ok: false, code: "unauthenticated" });
+    expect(createClient).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid files before touching the database", async () => {
+    for (const upload of [null, "notes.txt", file("%PDF-1.7", "report.pdf"), file("", "empty.txt")]) {
+      const result = await importDocument(upload);
+      expect(result).toMatchObject({ ok: false, code: "invalid_input" });
+    }
+    expect(createClient).not.toHaveBeenCalled();
+  });
+
+  it("creates no row when conversion fails", async () => {
+    const result = await importDocument(file("[docs]: https://example.com\n", "links.md"));
+
+    expect(result).toEqual({
+      ok: false,
+      code: "invalid_input",
+      error: "This file doesn't contain any text that can be imported.",
+    });
+    expect(createClient).not.toHaveBeenCalled();
+    expect(callsTo("insert")).toEqual([]);
+  });
+
+  it("returns a safe message when the insert fails", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    db.response = {
+      data: null,
+      error: { code: "42501", message: "new row violates row-level security policy" },
+    };
+
+    const result = await importDocument(file("Hello", "notes.txt"));
+
+    expect(result).toEqual({
+      ok: false,
+      code: "server_error",
+      error: "We couldn't import this file. Please try again.",
+    });
+    expect(log).toHaveBeenCalled();
   });
 });

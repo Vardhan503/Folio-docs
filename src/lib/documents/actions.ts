@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import {
   createDocument,
+  importDocument,
   updateDocumentContent,
   updateDocumentTitle,
 } from "@/lib/data/documents";
@@ -11,6 +12,19 @@ export type CreateDocumentState = { error: string | null };
 
 export async function createDocumentAction(): Promise<CreateDocumentState> {
   const result = await createDocument();
+  if (!result.ok) {
+    return { error: result.error };
+  }
+  redirect(`/documents/${result.data.id}`);
+}
+
+export type ImportDocumentState = { error: string | null };
+
+export async function importDocumentAction(
+  _previous: ImportDocumentState,
+  formData: FormData,
+): Promise<ImportDocumentState> {
+  const result = await importDocument(formData.get("file"));
   if (!result.ok) {
     return { error: result.error };
   }

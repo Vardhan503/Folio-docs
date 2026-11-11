@@ -7,8 +7,9 @@ This repository currently contains:
 - **Task 1:** the application shell and document dashboard.
 - **Task 2:** Supabase email/password authentication, route protection, and the database foundation (schema, row-level security, typed data access).
 - **Task 3:** creating documents, rich-text editing with Tiptap, renaming, autosave, and reopening saved documents.
+- **Task 4:** importing `.txt` and `.md` files as new documents.
 
-File import and sharing are not implemented yet.
+Sharing is not implemented yet.
 
 ## Tech stack
 
@@ -17,6 +18,8 @@ File import and sharing are not implemented yet.
 - Tailwind CSS 4
 - [lucide-react](https://lucide.dev) icons
 - [Supabase](https://supabase.com) Auth and Postgres via `@supabase/supabase-js` and `@supabase/ssr`
+- [Tiptap](https://tiptap.dev) v3 editor, with `@tiptap/markdown` for Markdown import
+- [Vitest](https://vitest.dev) for unit tests
 
 ## Local setup
 
@@ -111,6 +114,56 @@ Click the title to rename it. It saves when the field loses focus or you press E
 - A missing document, a malformed ID, and someone else's document all produce the same "Document not found" page, so the app never reveals whether a document exists. Database errors are logged on the server and shown to the user as a generic message.
 - Document pages are rendered per request and marked `private, no-store`; nothing user-specific is cached on the server.
 
+## Importing files
+
+### How to import
+
+On **My Documents**, click **Import File** (also shown in the empty state when you have no documents) and choose a file. While the file is checked and uploaded, the button shows **Importing…** with the file name and can't be clicked again. On success Folio creates a new document and opens it in the editor; on failure an error appears under the button and you can pick the same file again.
+
+| Rule              | Value                                                                      |
+| ----------------- | -------------------------------------------------------------------------- |
+| Supported types   | `.txt` (plain text) and `.md` (Markdown), by file extension                |
+| Maximum file size | 250 KB (256,000 bytes)                                                     |
+| Encoding          | UTF-8 (a byte-order mark is fine); invalid UTF-8 and binary files are rejected |
+| Title             | The file name without its extension, e.g. `meeting-notes.txt` → `meeting-notes` |
+
+The browser checks the file first for quick feedback, and the server repeats every check, so skipping the browser check doesn't help. MIME types are ignored because Markdown files are reported differently by each OS. File names are reduced to their last path segment, control and bidirectional-override characters are removed, whitespace is collapsed, and the result must pass the normal 1–120 character title rule; otherwise the import is rejected with a message asking you to rename the file.
+
+### Plain text (`.txt`)
+
+Each line becomes a paragraph and blank lines become empty paragraphs. Windows (`\r\n`) and Unix (`\n`) line endings both work. The text is never interpreted as HTML or Markdown, so `<`, `>`, `&`, `#`, and `**` appear exactly as written.
+
+### Markdown (`.md`)
+
+Markdown is converted with [`@tiptap/markdown`](https://tiptap.dev/docs/editor/markdown) using the editor's own extensions, so imports only contain formatting the editor supports:
+
+- Paragraphs, **Heading 1** (`#`) and **Heading 2** (`##`)
+- **Bold** (`**text**`, `__text__`), *italic* (`*text*`, `_text_`), and both together
+- Bulleted (`-`, `*`, `+`) and numbered (`1.`) lists, including nested lists and custom start numbers
+- Also kept because the editor supports them: hard line breaks, blockquotes, code and code blocks, strikethrough, and horizontal rules
+
+Constructs the editor doesn't support are handled predictably, keeping their text:
+
+| Markdown                    | Imported as                                                          |
+| --------------------------- | -------------------------------------------------------------------- |
+| `###` to `######` headings  | Normal paragraphs                                                    |
+| Links and images            | Their link text or alt text; URLs are dropped (links aren't enabled) |
+| Raw HTML (`<b>`, `<script>`) | Literal text; it is never rendered                                  |
+| Tables                      | One paragraph per row, cells separated by ` \| `                    |
+| Task lists (`- [ ] item`)   | List items starting with a literal `[ ]` or `[x]`                    |
+| Single line breaks          | Spaces, as in rendered Markdown                                      |
+
+### What happens on the server
+
+The `importDocumentAction` Server Action passes the uploaded file to `importDocument` in [`src/lib/data/documents.ts`](src/lib/data/documents.ts), which:
+
+1. Verifies the signed-in user with `getClaims()`.
+2. Checks the file's extension, size, and title, reads it as strict UTF-8, and rejects binary content ([`file-rules.ts`](src/lib/import/file-rules.ts)).
+3. Converts it to Tiptap JSON ([`convert.ts`](src/lib/import/convert.ts)), then checks the result against the editor's ProseMirror schema and the same content validation autosave uses (allowed nodes and marks, nesting depth, 500 KB limit). Anything that fails is rejected with a clear message.
+4. Inserts one row into the existing `documents` table, with `owner_id` taken from the verified user and the converted JSON in `content`.
+
+Nothing is written unless every step succeeds. The raw file is never stored and no Storage bucket is needed: imported documents are ordinary Tiptap JSON documents, so they open in the editor, autosave, appear in My Documents sorted by last edit, and can be renamed like any other document.
+
 ## Tests
 
 ```bash
@@ -120,7 +173,9 @@ npm run test -- --run
 Vitest runs in Node with no network access or Supabase credentials:
 
 - [`src/lib/documents/validation.test.ts`](src/lib/documents/validation.test.ts) covers title rules (valid, trimmed, empty, whitespace-only, overlong, non-string), content rules (valid documents, malformed roots and nodes, unsupported nodes and marks, heading levels, deep nesting, oversized and circular content), and UUID checks.
-- [`src/lib/data/documents.test.ts`](src/lib/data/documents.test.ts) mocks the session and Supabase client to check that each operation uses the verified user's ID as owner, filters by owner, rejects bad input without touching the database, reports expired sessions, treats rows hidden by RLS as not found, and hides database error details.
+- [`src/lib/documents/editor-content.test.ts`](src/lib/documents/editor-content.test.ts) builds documents with the editor's real schema and checks they pass validation directly and after the JSON round trip used by autosave.
+- [`src/lib/data/documents.test.ts`](src/lib/data/documents.test.ts) mocks the session and Supabase client to check that each operation uses the verified user's ID as owner, filters by owner, rejects bad input without touching the database, reports expired sessions, treats rows hidden by RLS as not found, and hides database error details. The import tests also check that a successful import makes exactly one insert, and that failed validation or conversion makes none.
+- [`src/lib/import/import.test.ts`](src/lib/import/import.test.ts) covers file rules (extensions, empty and oversized files, invalid UTF-8, binary content, file-name titles) and pins the exact JSON produced for plain text and for each supported and unsupported Markdown construct, because `@tiptap/markdown` is still in beta.
 
 These tests check the application logic only. They do **not** verify the live RLS policies; check those manually with two users (see below).
 
@@ -165,7 +220,7 @@ src/
     account/AccountMenu.tsx    Initials avatar, name/email, Sign out
     layout/                    AppShell, AppSidebar, AppHeader, FolioLogo
     documents/                 DocumentDashboard, DocumentSection, DocumentList (linked rows),
-                               CreateDocumentButton, LocalDateTime, EmptyState
+                               CreateDocumentButton, ImportFileButton, LocalDateTime, EmptyState
     editor/
       DocumentEditor.tsx       Tiptap editor page: back link, title, toolbar, canvas, status
       EditorToolbar.tsx        Formatting buttons with active states
@@ -173,6 +228,7 @@ src/
       SaveStatusIndicator.tsx  Unsaved / Saving / Saved / Failed + Retry
       useAutosave.ts           Debounced, serialized content autosave
       DocumentEditorStates.tsx Loading skeleton and message states
+      extensions.ts            Editor extensions (also the schema used to validate imports)
   lib/
     supabase/
       client.ts                Browser client
@@ -191,6 +247,10 @@ src/
     documents/
       actions.ts               Server Actions used by the dashboard and editor
       validation.ts            Title, content, and UUID validation (shared client/server)
+    import/
+      file-rules.ts            File type, size, UTF-8, and title rules (shared client/server)
+      convert.ts               Plain text and Markdown → validated Tiptap JSON
+      prepare-import.ts        Validates and converts an uploaded file before any insert
     account.ts                 Display name and initials helpers
     navigation.ts              Navigation items and active-route helpers
     format.ts                  Date formatting for "last edited"
@@ -214,6 +274,7 @@ vitest.config.mts              Test config (path alias, server-only stub)
 - Header account menu showing the signed-in user's name, email, and initials, with a working **Sign out**.
 - **My Documents** lists the user's real documents, most recently edited first, each linking to the editor. With no documents it shows the empty state; load failures show an error message instead of a misleading empty list. A missing profile falls back to the email address.
 - Document creation, the Tiptap editor, renaming, and autosave (see [Documents](#documents)).
+- Importing `.txt` and `.md` files as new documents (see [Importing files](#importing-files)).
 - Typed schema, Supabase clients, and a data-access layer kept separate from UI components.
 
 ### Known limitations
@@ -223,13 +284,16 @@ vitest.config.mts              Test config (path alias, server-only stub)
 - After editing, using the browser's Back button may briefly show the dashboard's previous titles and order until the page is reloaded or revisited.
 - Documents can't be deleted from the UI yet.
 - The editor only supports the formats listed above; links, images, and tables are not available.
+- Import accepts one `.txt` or `.md` file at a time, up to 250 KB, chosen with the file picker (no drag-and-drop). DOCX, PDF, and other formats aren't supported.
+- Markdown imports keep the text of unsupported constructs but not their structure: link and image URLs, table layout, task-list checkboxes, and H3–H6 heading styles are lost. Link reference definitions and footnote definitions aren't standard rendered text and are dropped, as in rendered Markdown.
+- A file of many very short lines can be under 250 KB yet exceed the 500 KB document limit once converted; such imports are rejected with a message to split the file.
+- Importing the same file twice creates two documents.
 
 ### Not implemented yet
 
 Their controls are disabled and labelled "Soon" where they appear in the UI:
 
 - Deleting documents
-- File import / upload
 - Document search
 - Sharing UI and reading documents shared with you
 - Realtime collaboration
