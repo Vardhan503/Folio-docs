@@ -14,6 +14,7 @@ import {
   validateTitle,
 } from "@/lib/documents/validation";
 import { prepareImport } from "@/lib/import/prepare-import";
+import { canEdit, isShareRole, type DocumentRole } from "@/lib/sharing/roles";
 import type { DocumentRow } from "@/lib/supabase/database.types";
 import { createClient } from "@/lib/supabase/server";
 import type { DocumentSummary } from "@/types/document";
@@ -21,17 +22,71 @@ import type { DocumentSummary } from "@/types/document";
 export type EditableDocument = Pick<
   DocumentRow,
   "id" | "title" | "content" | "updated_at"
->;
+> & { role: DocumentRole };
 
 export type SavedDocument = Pick<DocumentRow, "id" | "updated_at">;
 
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
+
 const NOT_FOUND_MESSAGE =
   "This document doesn't exist or you don't have access to it.";
-const SESSION_EXPIRED_MESSAGE =
+export const SESSION_EXPIRED_MESSAGE =
   "Your session has expired. Sign in again in a new tab, then retry.";
+const VIEW_ONLY_MESSAGE =
+  "You have view-only access to this document, so changes can't be saved.";
 
-function notFound<T>(): DataResult<T> {
+export function notFound<T>(): DataResult<T> {
   return rejected("not_found", NOT_FOUND_MESSAGE);
+}
+
+type AccessRow = {
+  owner_id: string;
+  document_shares?: { role: string; user_id: string }[] | null;
+};
+
+/** Owner via owner_id, otherwise the caller's own share (the query only embeds that one). */
+function roleFromAccessRow(row: AccessRow, userId: string): DocumentRole | null {
+  if (row.owner_id === userId) return "owner";
+  const share = row.document_shares?.find((candidate) => candidate.user_id === userId);
+  return share && isShareRole(share.role) ? share.role : null;
+}
+
+/**
+ * The caller's role on a document, read through RLS: documents the caller
+ * can't see resolve to not_found, whether they exist or not.
+ */
+export async function resolveDocumentRole(
+  supabase: SupabaseClient,
+  userId: string,
+  documentId: string,
+): Promise<DataResult<DocumentRole>> {
+  const { data, error } = await supabase
+    .from("documents")
+    .select("owner_id, document_shares(role, user_id)")
+    .eq("id", documentId)
+    .eq("document_shares.user_id", userId)
+    .maybeSingle();
+
+  if (error) {
+    return failure(
+      "resolveDocumentRole",
+      error,
+      "We couldn't check your access to this document. Please try again.",
+    );
+  }
+  const role = data ? roleFromAccessRow(data as AccessRow, userId) : null;
+  return role ? success(role) : notFound();
+}
+
+/** Server-side edit check that runs before every write; RLS checks again on the write. */
+async function requireEditAccess(
+  supabase: SupabaseClient,
+  userId: string,
+  documentId: string,
+): Promise<DataResult<DocumentRole>> {
+  const access = await resolveDocumentRole(supabase, userId, documentId);
+  if (access.ok && !canEdit(access.data)) return rejected("forbidden", VIEW_ONLY_MESSAGE);
+  return access;
 }
 
 /** Lists documents owned by the signed-in user, most recently edited first. */
@@ -126,7 +181,10 @@ export async function importDocument(file: unknown): Promise<DataResult<{ id: st
   return success({ id: data.id });
 }
 
-/** Loads a document the signed-in user owns. Missing and inaccessible documents look the same. */
+/**
+ * Loads a document the signed-in user owns or has been shared, with their role.
+ * RLS decides visibility; missing and inaccessible documents look the same.
+ */
 export async function getDocumentById(
   documentId: string,
 ): Promise<DataResult<EditableDocument>> {
@@ -136,9 +194,9 @@ export async function getDocumentById(
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("documents")
-    .select("id, title, content, updated_at")
+    .select("id, title, content, updated_at, owner_id, document_shares(role, user_id)")
     .eq("id", documentId)
-    .eq("owner_id", user.id)
+    .eq("document_shares.user_id", user.id)
     .maybeSingle();
 
   if (error) {
@@ -148,9 +206,16 @@ export async function getDocumentById(
       "We couldn't load this document. Refresh the page to try again.",
     );
   }
-  if (!data) return notFound();
+  const role = data ? roleFromAccessRow(data as AccessRow, user.id) : null;
+  if (!data || !role) return notFound();
 
-  return success(data);
+  return success({
+    id: data.id,
+    title: data.title,
+    content: data.content,
+    updated_at: data.updated_at,
+    role,
+  });
 }
 
 export async function updateDocumentTitle(
@@ -165,11 +230,13 @@ export async function updateDocumentTitle(
   if (!validated.ok) return rejected("invalid_input", validated.error);
 
   const supabase = await createClient();
+  const access = await requireEditAccess(supabase, user.id, documentId);
+  if (!access.ok) return access;
+
   const { data, error } = await supabase
     .from("documents")
     .update({ title: validated.value })
     .eq("id", documentId)
-    .eq("owner_id", user.id)
     .select("id, title, updated_at")
     .maybeSingle();
 
@@ -194,11 +261,13 @@ export async function updateDocumentContent(
   if (!validated.ok) return rejected("invalid_input", validated.error);
 
   const supabase = await createClient();
+  const access = await requireEditAccess(supabase, user.id, documentId);
+  if (!access.ok) return access;
+
   const { data, error } = await supabase
     .from("documents")
     .update({ content: validated.value })
     .eq("id", documentId)
-    .eq("owner_id", user.id)
     .select("id, updated_at")
     .maybeSingle();
 

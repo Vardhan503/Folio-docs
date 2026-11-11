@@ -13,6 +13,7 @@ type DocumentDashboardProps = {
   ownedDocuments: DocumentSummary[];
   sharedDocuments: DocumentSummary[];
   ownedLoadError?: string | null;
+  sharedLoadError?: string | null;
   /** Renders placeholder rows while document data streams in. */
   isLoading?: boolean;
 };
@@ -37,6 +38,7 @@ export function DocumentDashboard({
   ownedDocuments,
   sharedDocuments,
   ownedLoadError,
+  sharedLoadError,
   isLoading = false,
 }: DocumentDashboardProps) {
   const copy = viewCopy[view];
@@ -104,12 +106,14 @@ export function DocumentDashboard({
           icon={Users}
           tone="shared"
           documents={sharedDocuments}
+          errorMessage={sharedLoadError}
+          isLoading={isLoading}
           emptyState={
             <EmptyState
               icon={Inbox}
               size={showOwned ? "compact" : "default"}
               title="Nothing shared with you yet"
-              description="Sharing isn't available yet. Once it is, documents other people share with you will show up here."
+              description="When someone shares a document with you, it will show up here with your access level."
             />
           }
         />

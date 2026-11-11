@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { FileText } from "lucide-react";
 import { LocalDateTime } from "@/components/documents/LocalDateTime";
+import { ROLE_LABELS } from "@/lib/sharing/roles";
 import type { DocumentSummary } from "@/types/document";
 
 type DocumentListProps = {
@@ -37,6 +38,18 @@ export function DocumentList({ documents, label }: DocumentListProps) {
                 <span className="truncate text-sm font-medium text-ink">
                   {document.title}
                 </span>
+                {document.role ? (
+                  <span
+                    className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                      document.role === "editor"
+                        ? "bg-accent-soft text-accent"
+                        : "bg-canvas text-ink-muted"
+                    }`}
+                  >
+                    <span className="sr-only">Your access: </span>
+                    {ROLE_LABELS[document.role]}
+                  </span>
+                ) : null}
               </span>
               <span className="truncate pl-7 text-xs text-ink-muted md:pl-0 md:text-sm">
                 <span className="md:sr-only">Owner: </span>

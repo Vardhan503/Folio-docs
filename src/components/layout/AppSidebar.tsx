@@ -31,7 +31,7 @@ export function AppSidebar({ onNavigate }: AppSidebarProps) {
       <div className="mt-auto rounded-xl border border-line bg-canvas px-3.5 py-3">
         <p className="text-xs font-medium text-ink">Early preview</p>
         <p className="mt-1 text-xs leading-relaxed text-ink-muted">
-          Sharing isn&apos;t available yet.
+          Real-time co-editing isn&apos;t available yet.
         </p>
       </div>
     </div>

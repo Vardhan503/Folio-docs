@@ -1,4 +1,4 @@
-// Mirrors supabase/migrations/001_initial_schema.sql. Keep in sync with the schema,
+// Mirrors supabase/migrations/001–003. Keep in sync with the schema,
 // or regenerate with `npx supabase gen types typescript`.
 
 export type Json =
@@ -108,7 +108,12 @@ export type Database = {
       };
     };
     Views: { [_ in never]: never };
-    Functions: { [_ in never]: never };
+    Functions: {
+      find_share_recipient: {
+        Args: { p_document_id: string; p_email: string };
+        Returns: string | null;
+      };
+    };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
   };

@@ -27,16 +27,19 @@ type Call = { method: string; args: unknown[] };
 const db = vi.hoisted(() => ({
   calls: [] as Call[],
   response: { data: null, error: null } as QueryResponse,
+  /** Responses for successive queries; db.response is used once it's empty. */
+  queue: [] as QueryResponse[],
 }));
 
-/** Chainable stand-in for the Supabase query builder; awaiting it yields db.response. */
+/** Chainable stand-in for the Supabase query builder; awaiting it yields the next response. */
 function createQueryBuilder(): unknown {
   const builder: unknown = new Proxy(
     {},
     {
       get(_target, method: string) {
         if (method === "then") {
-          return (resolve: (value: QueryResponse) => void) => resolve(db.response);
+          return (resolve: (value: QueryResponse) => void) =>
+            resolve(db.queue.shift() ?? db.response);
         }
         return (...args: unknown[]) => {
           db.calls.push({ method, args });
@@ -66,9 +69,16 @@ function callsTo(method: string) {
   return db.calls.filter((call) => call.method === method).map((call) => call.args);
 }
 
+/** Access-check response for a document the signed-in user owns. */
+const OWNER_ACCESS: QueryResponse = {
+  data: { owner_id: USER.id, document_shares: [] },
+  error: null,
+};
+
 beforeEach(() => {
   session.user = USER;
   db.calls = [];
+  db.queue = [];
   db.response = { data: null, error: null };
   createClient.mockReset();
   createClient.mockImplementation(async () => ({
@@ -130,21 +140,22 @@ describe("createDocument", () => {
 });
 
 describe("getDocumentById", () => {
-  it("filters by both document id and the verified owner", async () => {
-    const row = {
-      id: DOCUMENT_ID,
-      title: "Plan",
-      content: createEmptyDocument(),
-      updated_at: "2026-11-11T19:00:00Z",
-    };
-    db.response = { data: row, error: null };
+  const row = {
+    id: DOCUMENT_ID,
+    title: "Plan",
+    content: createEmptyDocument(),
+    updated_at: "2026-11-11T19:00:00Z",
+  };
+
+  it("relies on RLS for access and only embeds the caller's own share", async () => {
+    db.response = { data: { ...row, owner_id: USER.id, document_shares: [] }, error: null };
 
     const result = await getDocumentById(DOCUMENT_ID);
 
-    expect(result).toEqual({ ok: true, data: row });
+    expect(result).toEqual({ ok: true, data: { ...row, role: "owner" } });
     expect(callsTo("eq")).toEqual([
       ["id", DOCUMENT_ID],
-      ["owner_id", USER.id],
+      ["document_shares.user_id", USER.id],
     ]);
   });
 
@@ -160,7 +171,8 @@ describe("getDocumentById", () => {
 });
 
 describe("updateDocumentTitle", () => {
-  it("saves the trimmed title scoped to the owner", async () => {
+  it("checks edit access, then saves only the trimmed title", async () => {
+    db.queue = [OWNER_ACCESS];
     db.response = {
       data: { id: DOCUMENT_ID, title: "Roadmap", updated_at: "2026-11-11T19:00:00Z" },
       error: null,
@@ -172,11 +184,13 @@ describe("updateDocumentTitle", () => {
     expect(callsTo("update")).toEqual([[{ title: "Roadmap" }]]);
     expect(callsTo("eq")).toEqual([
       ["id", DOCUMENT_ID],
-      ["owner_id", USER.id],
+      ["document_shares.user_id", USER.id],
+      ["id", DOCUMENT_ID],
     ]);
   });
 
   it("never writes the content column when renaming", async () => {
+    db.queue = [OWNER_ACCESS];
     db.response = {
       data: { id: DOCUMENT_ID, title: "Roadmap", updated_at: "2026-11-11T19:00:00Z" },
       error: null,
@@ -210,7 +224,8 @@ describe("updateDocumentContent", () => {
     content: [{ type: "paragraph", content: [{ type: "text", text: "Hello" }] }],
   };
 
-  it("saves validated JSON content scoped to the owner", async () => {
+  it("saves validated JSON content after checking edit access", async () => {
+    db.queue = [OWNER_ACCESS];
     db.response = {
       data: { id: DOCUMENT_ID, updated_at: "2026-11-11T19:00:00Z" },
       error: null,
@@ -223,7 +238,7 @@ describe("updateDocumentContent", () => {
       data: { id: DOCUMENT_ID, updated_at: "2026-11-11T19:00:00Z" },
     });
     expect(callsTo("update")).toEqual([[{ content }]]);
-    expect(callsTo("eq")).toContainEqual(["owner_id", USER.id]);
+    expect(callsTo("eq")).toContainEqual(["document_shares.user_id", USER.id]);
   });
 
   it("rejects malformed content before touching the database", async () => {
@@ -245,6 +260,7 @@ describe("updateDocumentContent", () => {
 
   it("does not expose database error details", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
+    db.queue = [OWNER_ACCESS];
     db.response = {
       data: null,
       error: { code: "XX000", message: "internal: relation details" },

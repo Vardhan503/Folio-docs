@@ -1,6 +1,8 @@
 export type DataErrorCode =
   | "invalid_input"
   | "not_found"
+  | "forbidden"
+  | "conflict"
   | "unauthenticated"
   | "server_error";
 

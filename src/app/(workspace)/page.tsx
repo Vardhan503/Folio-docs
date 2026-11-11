@@ -5,6 +5,7 @@ import { buildAccountSummary } from "@/lib/account";
 import { getCurrentUser } from "@/lib/auth/session";
 import { listOwnedDocuments } from "@/lib/data/documents";
 import { getCurrentProfile } from "@/lib/data/profiles";
+import { listSharedDocuments } from "@/lib/data/sharing";
 
 export const metadata: Metadata = {
   title: "My Documents",
@@ -38,14 +39,18 @@ async function MyDocuments() {
     profile?.email ?? user.email,
   );
 
-  const documents = await listOwnedDocuments(displayName);
+  const [documents, shared] = await Promise.all([
+    listOwnedDocuments(displayName),
+    listSharedDocuments(),
+  ]);
 
   return (
     <DocumentDashboard
       view="my-documents"
       ownedDocuments={documents.ok ? documents.data : []}
       ownedLoadError={documents.ok ? null : documents.error}
-      sharedDocuments={[]}
+      sharedDocuments={shared.ok ? shared.data : []}
+      sharedLoadError={shared.ok ? null : shared.error}
     />
   );
 }

@@ -8,6 +8,8 @@ import { MAX_TITLE_LENGTH, validateTitle } from "@/lib/documents/validation";
 type DocumentTitleInputProps = {
   documentId: string;
   initialTitle: string;
+  /** Viewers see the title as plain text. */
+  readOnly?: boolean;
 };
 
 const NETWORK_ERROR = "We couldn't reach the server to rename this document.";
@@ -15,6 +17,7 @@ const NETWORK_ERROR = "We couldn't reach the server to rename this document.";
 export function DocumentTitleInput({
   documentId,
   initialTitle,
+  readOnly = false,
 }: DocumentTitleInputProps) {
   const [value, setValue] = useState(initialTitle);
   const [savedTitle, setSavedTitle] = useState(initialTitle);
@@ -75,6 +78,14 @@ export function DocumentTitleInput({
   }
 
   const hasUnsavedTitle = error !== null && value !== savedTitle;
+
+  if (readOnly) {
+    return (
+      <h1 className="truncate py-1 text-xl font-semibold tracking-tight text-ink sm:text-2xl">
+        {savedTitle}
+      </h1>
+    );
+  }
 
   return (
     <div className="min-w-0">

@@ -61,6 +61,7 @@ async function DocumentLoader({
       initialTitle={result.data.title}
       initialContent={content.value}
       initialUpdatedAt={result.data.updated_at}
+      role={result.data.role}
     />
   );
 }
