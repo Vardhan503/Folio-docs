@@ -157,9 +157,9 @@ On **My Documents**, click **Import File** (also shown in the empty state when y
 
 | Rule              | Value                                                                      |
 | ----------------- | -------------------------------------------------------------------------- |
-| Supported types   | `.txt` (plain text) and `.md` (Markdown), by file extension                |
-| Maximum file size | 250 KB (256,000 bytes)                                                     |
-| Encoding          | UTF-8 (a byte-order mark is fine); invalid UTF-8 and binary files are rejected |
+| Supported types   | `.txt` (plain text), `.md` (Markdown), and `.docx` (Word), by file extension |
+| Maximum file size | `.txt` and `.md`: 250 KB (256,000 bytes); `.docx`: 1 MB (1,000,000 bytes)  |
+| Encoding          | `.txt` and `.md`: UTF-8 (a byte-order mark is fine); invalid UTF-8 and binary files are rejected |
 | Title             | The file name without its extension, e.g. `meeting-notes.txt` → `meeting-notes` |
 
 The browser checks the file first for quick feedback, and the server repeats every check, so skipping the browser check doesn't help. MIME types are ignored because Markdown files are reported differently by each OS. File names are reduced to their last path segment, control and bidirectional-override characters are removed, whitespace is collapsed, and the result must pass the normal 1–120 character title rule; otherwise the import is rejected with a message asking you to rename the file.
@@ -188,13 +188,40 @@ Constructs the editor doesn't support are handled predictably, keeping their tex
 | Task lists (`- [ ] item`)   | List items starting with a literal `[ ]` or `[x]`                    |
 | Single line breaks          | Spaces, as in rendered Markdown                                      |
 
+### Word (`.docx`)
+
+Word documents are converted on the server with [mammoth](https://github.com/mwilliamson/mammoth.js) (free, BSD-2-Clause, runs locally; no external service). Folio reads mammoth's parsed document model and builds Tiptap JSON from it directly; the HTML mammoth can produce is discarded, so no HTML is ever stored, rendered, or sanitized.
+
+| Word                                              | Imported as                                    |
+| ------------------------------------------------- | ---------------------------------------------- |
+| Title, Heading 1                                  | Heading 1                                      |
+| Subtitle, Heading 2                               | Heading 2                                      |
+| Heading 3 and below                               | Normal paragraphs                              |
+| Bold, italic, underline, strikethrough            | The same marks                                 |
+| Bulleted and numbered lists, including nesting    | Bulleted and numbered lists                    |
+| Quote and Intense Quote styles                    | A quote block                                  |
+| Center, right, and justified alignment            | The same alignment                             |
+| Line breaks                                       | Line breaks (page and column breaks are dropped) |
+| Tables                                            | One paragraph per row, cells separated by ` \| ` |
+| Hyperlinks                                        | Their text; the address is dropped             |
+| Images, fonts, colors, sizes, highlights, comments, footnotes | Dropped                            |
+
+Safety limits, checked before mammoth runs ([`docx-archive.ts`](src/lib/import/docx-archive.ts)):
+
+- The file must be a ZIP archive containing `[Content_Types].xml` and `word/document.xml`. Password-protected, multi-volume, ZIP64, and unknown-compression archives, duplicate entry names, and entries whose real size doesn't match their header are rejected.
+- Every entry is decompressed with a hard output cap, so the archive's own size claims aren't trusted: at most 1,000 entries, 10 MB per entry, and 25 MB in total. Larger archives (for example zip bombs) are rejected with a message before any parsing.
+- mammoth runs with external file access off, and images are never read.
+- The converted document must still pass the schema and the 500 KB content limit.
+
+Older Word `.doc` files aren't supported; the error message asks you to save the file as `.docx`. [`sample.docx`](sample.docx) shows what's kept.
+
 ### What happens on the server
 
 The `importDocumentAction` Server Action passes the uploaded file to `importDocument` in [`src/lib/data/documents.ts`](src/lib/data/documents.ts), which:
 
 1. Verifies the signed-in user with `getClaims()`.
-2. Checks the file's extension, size, and title, reads it as strict UTF-8, and rejects binary content ([`file-rules.ts`](src/lib/import/file-rules.ts)).
-3. Converts it to Tiptap JSON ([`convert.ts`](src/lib/import/convert.ts)), then checks the result against the editor's ProseMirror schema and the same content validation autosave uses (allowed nodes and marks, nesting depth, 500 KB limit). Anything that fails is rejected with a clear message.
+2. Checks the file's extension, size, and title ([`file-rules.ts`](src/lib/import/file-rules.ts)). Text files are read as strict UTF-8 and binary content is rejected; `.docx` files go through the archive checks above.
+3. Converts it to Tiptap JSON ([`convert.ts`](src/lib/import/convert.ts), [`docx.ts`](src/lib/import/docx.ts)), then checks the result against the editor's ProseMirror schema and the same content validation autosave uses (allowed nodes and marks, nesting depth, 500 KB limit). Anything that fails is rejected with a clear message.
 4. Inserts one row into the existing `documents` table, with `owner_id` taken from the verified user and the converted JSON in `content`.
 
 Nothing is written unless every step succeeds. The raw file is never stored and no Storage bucket is needed: imported documents are ordinary Tiptap JSON documents, so they open in the editor, autosave, appear in My Documents sorted by last edit, and can be renamed like any other document.
@@ -282,6 +309,7 @@ Vitest runs in Node with no network access or Supabase credentials:
 - [`src/lib/search.test.ts`](src/lib/search.test.ts) and [`src/lib/sidebar-preference.test.ts`](src/lib/sidebar-preference.test.ts) cover the title filter (case, accents, regex characters, only the given list) and the stored sidebar preference (default, invalid values, broken storage).
 - [`src/lib/data/documents.test.ts`](src/lib/data/documents.test.ts) mocks the session and Supabase client to check that each operation uses the verified user's ID as owner, checks edit access before saving, rejects bad input without touching the database, reports expired sessions, treats rows hidden by RLS as not found, and hides database error details. The import tests also check that a successful import makes exactly one insert, and that failed validation or conversion makes none.
   The document action tests check that a copy is inserted with the caller as owner and never touches `document_shares`; that viewers can't copy or download; that unknown download formats are refused before any query; and that delete is refused for editors and viewers, filters by both `id` and `owner_id`, and treats a document RLS hides, or a delete that removed no row, as not found.
+- [`src/lib/import/docx.test.ts`](src/lib/import/docx.test.ts) builds Word documents in the test with a small ZIP writer and checks headings, marks, nested and numbered lists, quotes, alignment, tables, line breaks, and link text; that markup-like text stays literal and link addresses never appear; that Word fonts and colors are dropped; and that empty, non-archive, non-Word, and malformed-XML files are rejected. It also forges archives to check that truncated files, encrypted entries, unknown compression, duplicate names, lying size headers, a zip bomb under 1 MB that claims to be small, too much total data, and too many entries are all rejected; plus the `.docx` size limit, the `.doc` message, and an end-to-end upload.
 - [`src/lib/documents/export.test.ts`](src/lib/documents/export.test.ts) covers "Copy of" titles within the title limit, download filenames (path traversal, control and invisible characters, HTML, accents, length), plain-text and Markdown output for every block type, HTML typed as text being escaped in Markdown, and which roles may copy, download, and delete.
 - [`src/lib/import/import.test.ts`](src/lib/import/import.test.ts) covers file rules (extensions, empty and oversized files, invalid UTF-8, binary content, file-name titles) and pins the exact JSON produced for plain text and for each supported and unsupported Markdown construct, because `@tiptap/markdown` is still in beta.
 - [`src/components/editor/autosave-controller.test.ts`](src/components/editor/autosave-controller.test.ts) drives the autosave state machine with fake timers: debouncing, one save in flight with the newest content sent last, "saved" only once the latest revision is stored, failures for expired sessions, revoked access, view-only access, and database errors (edits kept, never shown as saved, Retry offered only when it can help), network failures followed by a successful retry, no saves when nothing was edited, and the final save when leaving the page.
@@ -395,6 +423,8 @@ src/
       file-rules.ts            File type, size, UTF-8, and title rules (shared client/server)
       convert.ts               Plain text and Markdown → validated Tiptap JSON
       prepare-import.ts        Validates and converts an uploaded file before any insert
+      docx-archive.ts          ZIP structure and decompression limits for .docx (server)
+      docx.ts                  Word document model → Tiptap JSON via mammoth (server)
     account.ts                 Display name and initials helpers
     navigation.ts              Navigation items and active-route helpers
     search.ts                  Title normalization and filtering
@@ -425,7 +455,7 @@ vitest.config.mts              Test config (path alias, server-only stub)
 - Header account menu showing the signed-in user's name, email, and initials, with a working **Sign out**.
 - **My Documents** lists the user's real documents, most recently edited first, each linking to the editor. With no documents it shows the empty state; load failures show an error message instead of a misleading empty list. A missing profile falls back to the email address.
 - Document creation, the Tiptap editor, renaming, and autosave (see [Documents](#documents)).
-- Importing `.txt` and `.md` files as new documents (see [Importing files](#importing-files)).
+- Importing `.txt`, `.md`, and `.docx` files as new documents (see [Importing files](#importing-files)).
 - Sharing with viewer and editor roles, permission changes, revocation, and the Shared With Me dashboard (see [Sharing](#sharing)).
 - Document actions: make a copy, download as `.txt` or `.md`, copy link, and owner-only delete (see [Document actions](#document-actions)).
 - Typed schema, Supabase clients, and a data-access layer kept separate from UI components.
@@ -440,7 +470,8 @@ vitest.config.mts              Test config (path alias, server-only stub)
 - Deletion is permanent; there is no trash or undo.
 - The document actions menu is on the document page only, not on dashboard rows.
 - The editor only supports the formats listed above; links, images, tables, font families, and custom colors are not available. Pasted formatting outside the palette and size list is dropped.
-- Import accepts one `.txt` or `.md` file at a time, up to 250 KB, chosen with the file picker (no drag-and-drop). DOCX, PDF, and other formats aren't supported.
+- Import accepts one `.txt` or `.md` file (up to 250 KB) or `.docx` file (up to 1 MB) at a time, chosen with the file picker (no drag-and-drop). `.doc`, PDF, and other formats aren't supported. The `.docx` limit stays under the 1 MB default Server Action request size, so the limit for every other action is unchanged.
+- `.docx` imports drop images, links, fonts, colors, sizes, comments, footnotes, and Heading 3–6 styles, and flatten tables into rows of text.
 - Markdown imports keep the text of unsupported constructs but not their structure: link and image URLs, table layout, task-list checkboxes, and H3–H6 heading styles are lost. Link reference definitions and footnote definitions aren't standard rendered text and are dropped, as in rendered Markdown.
 - A file of many very short lines can be under 250 KB yet exceed the 500 KB document limit once converted; such imports are rejected with a message to split the file.
 - Importing the same file twice creates two documents.

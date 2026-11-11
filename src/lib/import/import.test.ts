@@ -35,7 +35,7 @@ describe("validateImportFile", () => {
     });
   });
 
-  it.each(["report.pdf", "notes.docx", "notes", "notes.md.exe", "notes.markdown"])(
+  it.each(["report.pdf", "notes.docm", "notes", "notes.md.exe", "notes.markdown", "notes.docx.zip"])(
     "rejects unsupported file %s",
     (name) => {
       expect(validateImportFile({ name, size: 10 })).toEqual({

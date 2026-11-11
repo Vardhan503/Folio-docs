@@ -132,11 +132,21 @@ function replaceSoftBreaks(node: JSONContent, inCode = false): JSONContent {
  */
 export function convertImportedText(
   text: string,
-  format: ImportFormat,
+  format: Exclude<ImportFormat, "docx">,
 ): ValidationResult<TiptapDocument> {
+  let converted: JSONContent;
+  try {
+    converted = format === "markdown" ? markdownToDocument(text) : textToDocument(text);
+  } catch {
+    return { ok: false, error: CONVERSION_ERRORS.failed };
+  }
+  return finalizeImportedDocument(converted);
+}
+
+/** The schema and validation checks every import format ends with. */
+export function finalizeImportedDocument(converted: JSONContent): ValidationResult<TiptapDocument> {
   let json: unknown;
   try {
-    const converted = format === "markdown" ? markdownToDocument(text) : textToDocument(text);
     if (!hasText(converted)) return { ok: false, error: CONVERSION_ERRORS.noText };
 
     const node = editorSchema.nodeFromJSON(converted);

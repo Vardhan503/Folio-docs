@@ -56,7 +56,8 @@ The Vitest suite uses mocks and doesn't prove database security. The two RLS che
 
 - [ ] Import a small `.txt` file: a new document opens, titled after the file, with paragraphs preserved.
 - [ ] Import a `.md` file with headings, lists, bold, and italic: they appear formatted.
-- [ ] Try a `.pdf` (or another extension), an empty file, and a file over 250 KB: each is rejected with a clear message and no document is created.
+- [ ] Import [`sample.docx`](../sample.docx): title is `sample`; headings, bold/italic/underline/strikethrough, lists, a quote, and a table flattened to ` | ` rows appear. Fonts, colors, images, and link addresses do not.
+- [ ] Try a `.pdf`, a `.doc`, an empty file, a text file renamed to `.docx`, and a file over the limit (250 KB for text, 1 MB for `.docx`): each is rejected with a clear message and no document is created.
 - [ ] Return to My Documents: the imported document is listed and owned by you.
 
 ## Sharing
@@ -106,7 +107,7 @@ Check at 1440, 768, and 375 px wide (dev tools device toolbar):
 These are expected and not bugs:
 
 - No realtime collaboration. Two people or tabs editing the same document is last-write-wins.
-- Import accepts only `.txt` and `.md`, one file at a time, up to 250 KB.
+- Import accepts one `.txt` or `.md` (up to 250 KB) or `.docx` (up to 1 MB) at a time. `.docx` drops images, fonts, colors, link URLs, comments, and H3+ styles.
 - No version history, comments, or file export.
 - No deleting documents, search, registration, or password reset.
 - Revoking access can't remove content that's already open in the other person's browser; it only stops further saves and loads.

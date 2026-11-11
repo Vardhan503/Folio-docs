@@ -38,6 +38,8 @@ const alignClass = {
 async function findFileProblem(file: File): Promise<string | null> {
   const checked = validateImportFile({ name: file.name, size: file.size });
   if (!checked.ok) return checked.error;
+  // .docx is a binary archive; only the server can inspect it safely.
+  if (checked.value.format === "docx") return null;
   try {
     const text = decodeImportText(new Uint8Array(await file.arrayBuffer()));
     return text.ok ? null : text.error;

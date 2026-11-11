@@ -1,9 +1,11 @@
 import type { TiptapDocument, ValidationResult } from "@/lib/documents/validation";
 import { convertImportedText } from "@/lib/import/convert";
+import { convertDocx } from "@/lib/import/docx";
 import {
   IMPORT_ERRORS,
-  MAX_IMPORT_BYTES,
   decodeImportText,
+  maxImportBytes,
+  tooLargeError,
   validateImportFile,
 } from "@/lib/import/file-rules";
 
@@ -16,13 +18,18 @@ export async function prepareImport(file: unknown): Promise<ValidationResult<Pre
   const checked = validateImportFile({ name: file.name, size: file.size });
   if (!checked.ok) return checked;
 
+  const { format } = checked.value;
   const bytes = new Uint8Array(await file.arrayBuffer());
-  if (bytes.byteLength > MAX_IMPORT_BYTES) return { ok: false, error: IMPORT_ERRORS.tooLarge };
+  if (bytes.byteLength > maxImportBytes(format)) return { ok: false, error: tooLargeError(format) };
 
-  const text = decodeImportText(bytes);
-  if (!text.ok) return text;
-
-  const content = convertImportedText(text.value, checked.value.format);
+  let content: ValidationResult<TiptapDocument>;
+  if (format === "docx") {
+    content = await convertDocx(bytes);
+  } else {
+    const text = decodeImportText(bytes);
+    if (!text.ok) return text;
+    content = convertImportedText(text.value, format);
+  }
   if (!content.ok) return content;
 
   return { ok: true, value: { title: checked.value.title, content: content.value } };

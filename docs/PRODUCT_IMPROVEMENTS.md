@@ -135,11 +135,19 @@ The original assessment requires a public live URL and a 3–5 minute walkthroug
 - `validation.ts` accepts `textStyle` and `highlight` marks and `textAlign` only with values from `formatting.ts`; anything else is rejected on save.
 - Verified in the browser: colour, highlight, size, and alignment survive autosave and a reload with identical JSON; layouts at 375, 1100 (sidebar open and closed), and 1440 px. Tests: 246/246; lint, tsc, build clean; `npm audit --omit=dev` 0 vulnerabilities.
 
-### Slice 4 — Document actions
+### Slice 4 — Document actions (`1cb5bcd`)
 
 - Editor-header **⋯** menu: Rename, Make a copy, Download `.txt` / `.md`, Copy link, and owner-only Delete with a confirmation dialog. No migration: the owner-only delete policy and the `on delete cascade` from shares already existed.
 - Server functions re-check the role through RLS: copy and download need owner or editor, delete needs owner (and filters by `owner_id`). Delete calls `revalidatePath("/", "layout")` so pages kept in the client cache are refetched.
 - Verified in the browser as the second demo user on their own document: rename, both downloads (content and the `Q3 plan final` filename), copy made right after an edit includes that edit, delete dialog (Cancel focused by default) returns to My Documents with a notice, the copy's URL then shows "Document not found"; as an editor on a shared document the menu has no Delete. Not verified in the browser: viewer menu (only Copy link) and a successful clipboard write (the automation tab has no window focus, so the clipboard is refused and the fallback message was shown).
 - `npm run test:rls-live`: 39 passed, 0 failed (new: anonymous and viewer can't delete, owner deletes exactly one row, shares are removed with the document).
 - Tests: 282/282 in 11 files; lint, tsc, build clean.
+
+### Slice 5 — DOCX import
+
+- Import accepts `.txt`, `.md`, and `.docx`. `.docx` uses mammoth locally (no paid API); Folio reads mammoth's document model and builds Tiptap JSON directly — the HTML mammoth can produce is discarded. Images are never read; external file access is off.
+- Before mammoth runs, [`docx-archive.ts`](../src/lib/import/docx-archive.ts) inspects the ZIP: required Word parts, no encryption / ZIP64 / multi-volume / unknown compression, measured decompression with caps (1,000 entries, 10 MB/entry, 25 MB total). Invalid or unsafe archives never touch the database.
+- Best-effort conversion: Title/H1/H2, bold/italic/underline/strike, nested lists, quotes, alignment, tables flattened to ` | `, link text kept without URLs. Fonts, colors, sizes, images, comments, and H3+ are dropped. Legacy `.doc` is rejected with a clear message. Limit: 1 MB upload (under the default Server Action body size).
+- Verified in the browser with [`sample.docx`](../sample.docx): opened as title `sample` with headings, marks, lists, quote, and flattened table; no scripts/URLs in content. Damaged `.docx` creates no row (unit-tested).
+- Tests: 304/304 in 12 files (including the checked-in `sample.docx` fixture); lint, tsc, build clean. RLS live suite not re-run for this slice (import uses the same owner-only insert path; no policy change).
 

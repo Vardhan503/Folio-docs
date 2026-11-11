@@ -164,8 +164,8 @@ export async function createDocument(): Promise<DataResult<{ id: string }>> {
 }
 
 /**
- * Creates a document from an uploaded .txt or .md file. The file is validated
- * and converted before the single insert; the raw file is never stored.
+ * Creates a document from an uploaded .txt, .md, or .docx file. The file is
+ * validated and converted before the single insert; the raw file is never stored.
  */
 export async function importDocument(file: unknown): Promise<DataResult<{ id: string }>> {
   const user = await getOptionalUser();

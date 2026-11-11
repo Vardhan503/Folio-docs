@@ -343,6 +343,13 @@ describe("importDocument", () => {
     expect(createClient).not.toHaveBeenCalled();
   });
 
+  it("creates no row for a damaged .docx", async () => {
+    const result = await importDocument(new File(["PK not really a zip"], "report.docx"));
+
+    expect(result).toMatchObject({ ok: false, code: "invalid_input" });
+    expect(createClient).not.toHaveBeenCalled();
+  });
+
   it("creates no row when conversion fails", async () => {
     const result = await importDocument(file("[docs]: https://example.com\n", "links.md"));
 
