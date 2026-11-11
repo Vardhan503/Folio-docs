@@ -1,36 +1,83 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Folio
 
-## Getting Started
+Folio is a lightweight collaborative document editor inspired by Google Docs, built for the Ajaia engineering assessment.
 
-First, run the development server:
+This repository currently contains **Task 1: the application foundation and document dashboard**. No document data, editing, or collaboration features exist yet.
+
+## Tech stack
+
+- [Next.js](https://nextjs.org) 16 (App Router, Cache Components, Turbopack)
+- React 19 and TypeScript
+- Tailwind CSS 4
+- [lucide-react](https://lucide.dev) icons
+
+## Local setup
+
+Requirements: Node.js 20.9 or newer and npm.
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Then open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Other scripts:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Command          | Purpose                          |
+| ---------------- | -------------------------------- |
+| `npm run lint`   | Run ESLint                       |
+| `npx tsc --noEmit` | Type-check the project         |
+| `npm run build`  | Create a production build        |
+| `npm start`      | Serve the production build       |
 
-## Learn More
+## Project structure
 
-To learn more about Next.js, take a look at the following resources:
+```
+src/
+  app/
+    layout.tsx                 Root layout, fonts, metadata
+    globals.css                Tailwind import and design tokens
+    (workspace)/
+      layout.tsx               Wraps workspace pages in the app shell
+      page.tsx                 "/"        My Documents
+      shared/page.tsx          "/shared"  Shared With Me
+  components/
+    layout/
+      AppShell.tsx             Sidebar + header frame, mobile drawer state
+      AppSidebar.tsx           Branding and primary navigation
+      AppHeader.tsx            Breadcrumb, search field, avatar placeholder
+      FolioLogo.tsx            Logo mark and wordmark
+    documents/
+      DocumentDashboard.tsx    Page heading, actions, owned/shared sections
+      DocumentSection.tsx      Card that shows a document list or empty state
+      DocumentList.tsx         Responsive title / owner / last edited list
+      EmptyState.tsx           Reusable empty state
+  lib/
+    navigation.ts              Navigation items and active-route helpers
+    format.ts                  Date formatting for "last edited"
+  types/
+    document.ts                DocumentSummary and related types
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Implementation status
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Done (Task 1)
 
-## Deploy on Vercel
+- Responsive app shell: a fixed sidebar on desktop and a slide-in navigation drawer on mobile (closes with Escape, the close button, the backdrop, or after navigating).
+- Header with workspace breadcrumb, document search field, and an avatar placeholder.
+- **My Documents** (`/`) with "Owned by you" and "Shared with you" sections, each visually distinct and each with an empty state.
+- **Shared With Me** (`/shared`) showing only shared documents.
+- A typed, responsive `DocumentList` ready to display title, owner, and last edited time (a table-style layout on desktop and stacked rows on mobile). It isn't visible yet because there is no document data.
+- Accessibility: skip link, labelled landmarks and regions, `aria-current` on active navigation, visible keyboard focus styles.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Not implemented yet
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+These are intentionally out of scope for Task 1. Their controls are disabled and labelled "Soon" in the UI:
+
+- Creating documents and the rich-text editor
+- File import / upload
+- Document search
+- Authentication and user accounts (the avatar is a placeholder)
+- Sharing and permissions
+- Persistence (no database or local storage; every list is empty)
