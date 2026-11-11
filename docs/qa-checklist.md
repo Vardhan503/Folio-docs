@@ -40,7 +40,8 @@ The Vitest suite uses mocks and doesn't prove database security. The two RLS che
 - [ ] Sign in as A, open My Documents, Shared With Me, and a document, then sign out. On `/login`, open the browser dev tools and search the page (Elements panel) for one of A's document titles: it must not be found.
 - [ ] After signing out, press the browser Back button. You stay on (or are sent back to) `/login`; none of A's documents, names, or emails appear.
 - [ ] Sign in as B in the same window. Only B's documents and documents shared with B appear. Search the page for one of A's private titles: not found. Repeat the other way round.
-- [ ] With A signed in in two tabs, sign out in one and sign in as B there. In the other tab, navigate or reload: it shows B's data (or `/login`), never a mix.
+- [ ] With A signed in in two tabs, sign out in one. The other tab should go to `/login` on its own (BroadcastChannel ping). Signing in as B in one tab and using the other still must not mix private data after the next load.
+
 
 ## Document lifecycle
 
@@ -48,7 +49,7 @@ The Vitest suite uses mocks and doesn't prove database security. The two RLS che
 - [ ] Typing shows "Unsaved changes", then "Saving…", then "All changes saved" with a time. Reload: the text is still there.
 - [ ] Each toolbar button (headings, bold, italic, underline, lists, undo/redo) works and shows its active state; buttons are disabled when they can't apply.
 - [ ] Rename: click the title, change it, press Enter. Reload: the new title stays. An empty title is rejected and the old one kept; Escape cancels.
-- [ ] Rename, then use the in-app Back link and the browser Back button. My Documents shows the new title (the old one may flash for a moment).
+- [ ] Rename, then use the in-app Back link and the browser Back button. My Documents shows loading placeholders briefly, then the new title (not the old one).
 - [ ] With the dev tools' Network panel set to Offline, type: "Save failed" appears with Retry and the edits stay. Go back online and click Retry: "All changes saved".
 - [ ] Opening a random UUID at `/documents/<uuid>` shows "Document not found".
 
@@ -111,8 +112,8 @@ These are expected and not bugs:
 - No version history, comments, or file export.
 - No deleting documents, search, registration, or password reset.
 - Revoking access can't remove content that's already open in the other person's browser; it only stops further saves and loads.
-- Going back to a dashboard can show its previous contents for a moment before it refreshes.
-- Signing out in another tab isn't noticed until the open tab next contacts the server.
+- Going back to a dashboard shows loading placeholders while it refreshes (caching stays on).
+- Signing out in another tab should send the open tab to `/login` via BroadcastChannel; if the channel is unavailable, the open tab notices on its next server request.
 
 ## Results from the Task 6 pass (Nov 11, 2026)
 

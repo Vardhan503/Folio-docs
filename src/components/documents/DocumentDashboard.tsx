@@ -5,7 +5,7 @@ import { CreateDocumentButton } from "@/components/documents/CreateDocumentButto
 import { DocumentSection } from "@/components/documents/DocumentSection";
 import { EmptyState } from "@/components/documents/EmptyState";
 import { ImportFileButton } from "@/components/documents/ImportFileButton";
-import { RefreshOnReturn } from "@/components/documents/RefreshOnReturn";
+import { useRefreshOnReturn } from "@/components/documents/RefreshOnReturn";
 import { useSearch, useSearchQuery } from "@/components/search/SearchProvider";
 import { IMPORT_FORMATS_HINT } from "@/lib/import/file-rules";
 import { filterByTitle } from "@/lib/search";
@@ -51,7 +51,11 @@ export function DocumentDashboard({
   const scope = view === "shared" ? "/shared" : "/";
   const query = useSearchQuery(scope);
   const { setSearch } = useSearch();
-  const isSearching = !isLoading && query.trim() !== "";
+  // Returning to a preserved page refreshes server data; show placeholders
+  // instead of the previous titles for that moment.
+  const isRefreshing = useRefreshOnReturn();
+  const showLoading = isLoading || isRefreshing;
+  const isSearching = !showLoading && query.trim() !== "";
   const visibleOwned = filterByTitle(ownedDocuments, query);
   const visibleShared = filterByTitle(sharedDocuments, query);
   const matchCount = (showOwned ? visibleOwned.length : 0) + visibleShared.length;
@@ -80,7 +84,6 @@ export function DocumentDashboard({
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
-      {isLoading ? null : <RefreshOnReturn />}
       <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between md:gap-8">
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight text-ink sm:text-[28px]">
@@ -122,7 +125,7 @@ export function DocumentDashboard({
             totalCount={ownedDocuments.length}
             noResults={noResults}
             errorMessage={ownedLoadError}
-            isLoading={isLoading}
+            isLoading={showLoading}
             emptyState={
               <EmptyState
                 icon={FileText}
@@ -152,7 +155,7 @@ export function DocumentDashboard({
           totalCount={sharedDocuments.length}
           noResults={noResults}
           errorMessage={sharedLoadError}
-          isLoading={isLoading}
+          isLoading={showLoading}
           emptyState={
             <EmptyState
               icon={Inbox}

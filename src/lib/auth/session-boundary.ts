@@ -3,6 +3,15 @@ export function isSupabaseAuthCookie(name: string): boolean {
   return /^sb-.+-auth-token(?:\.\d+|-code-verifier)?$/.test(name);
 }
 
+/** Cross-tab channel name. Messages carry only an event type — never emails, tokens, or document data. */
+export const SESSION_SYNC_CHANNEL = "folio-session";
+
+export type SessionSyncEvent = "signed-out";
+
+export function isSessionSyncEvent(value: unknown): value is SessionSyncEvent {
+  return value === "signed-out";
+}
+
 /**
  * Whether this browser document must be reloaded because the signed-in user
  * changed. `previous` is the user last rendered in this document (undefined

@@ -3,7 +3,11 @@ import type { AuthenticatedUser } from "@/lib/auth/session";
 import * as documentActions from "@/lib/documents/actions";
 import * as sharingActions from "@/lib/sharing/actions";
 import * as authActions from "@/lib/auth/actions";
-import { isSupabaseAuthCookie, shouldResetForSession } from "@/lib/auth/session-boundary";
+import {
+  isSessionSyncEvent,
+  isSupabaseAuthCookie,
+  shouldResetForSession,
+} from "@/lib/auth/session-boundary";
 
 // Every export of a "use server" module is a public HTTP endpoint, so these
 // tests call the actions directly the way a crafted request could.
@@ -171,5 +175,12 @@ describe("account switching", () => {
     expect(isSupabaseAuthCookie("sb-proj-auth-token-code-verifier")).toBe(true);
     expect(isSupabaseAuthCookie("sb-proj-other")).toBe(false);
     expect(isSupabaseAuthCookie("auth-token")).toBe(false);
+  });
+
+  it("accepts only the signed-out sync event (no private payloads)", () => {
+    expect(isSessionSyncEvent("signed-out")).toBe(true);
+    expect(isSessionSyncEvent("session-changed")).toBe(false);
+    expect(isSessionSyncEvent({ email: "a@b.com" })).toBe(false);
+    expect(isSessionSyncEvent(null)).toBe(false);
   });
 });

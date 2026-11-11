@@ -17,66 +17,64 @@ Do not rewrite established authentication, secure RLS policies, editor autosave,
 
 ## Prioritized requirements
 
-### P0 — Safeguard existing work (first)
-
-- [ ] Review git status, review Task 6 changes and ensure `.env.local` and secrets are not staged.
-- [ ] Run `npm run lint`, `npx tsc --noEmit`, `npm run test -- --run`, `npm run build` and, when demo accounts/environment are configured, `npm run test:rls-live`.
-- [ ] Commit current working state before further changes.
+- [x] Review git status, review Task 6 changes and ensure `.env.local` and secrets are not staged.
+- [x] Run `npm run lint`, `npx tsc --noEmit`, `npm run test -- --run`, `npm run build` and, when demo accounts/environment are configured, `npm run test:rls-live`.
+- [x] Commit current working state before further changes.
 
 ### P1 — Expand rich-text toolbar
 
-- [ ] Text color picker with a small predefined safe color palette and Reset color.
-- [ ] Multi-color text highlighting with Remove highlight.
-- [ ] Paragraph and heading alignment: left, center, right, justify; show active state.
-- [ ] Selective useful extras: strikethrough, clear formatting, font size dropdown (bounded values), optional block quote; retain existing bold/italic/underline/headings/lists/undo/redo.
-- [ ] Group toolbar controls with separators; use overflow or a More dropdown on mobile rather than an endlessly scrolling row.
-- [ ] Keep the toolbar accessible with aria-label, active states, keyboard focus, and text-selection preservation when clicking controls.
-- [ ] Viewer mode remains read-only. Editor/owner may format.
-- [ ] **Critical:** extend the shared Tiptap schema/content validation to accept only the new supported marks/attributes (textStyle, color, highlight, textAlign, font size, etc.); use a bounded palette/whitelist rather than arbitrary CSS. Confirm JSON round-trip and autosave across reload. Ensure the import pipeline can coexist with this schema.
-- [ ] Do not register duplicate Tiptap extensions. Prefer matching Tiptap v3 extensions: `@tiptap/extension-highlight`, `@tiptap/extension-text-align`, `@tiptap/extension-text-style` (TextStyleKit) where compatible with the installed version.
+- [x] Text color picker with a small predefined safe color palette and Reset color.
+- [x] Multi-color text highlighting with Remove highlight.
+- [x] Paragraph and heading alignment: left, center, right, justify; show active state.
+- [x] Selective useful extras: strikethrough, clear formatting, font size dropdown (bounded values), optional block quote; retain existing bold/italic/underline/headings/lists/undo/redo.
+- [x] Group toolbar controls with separators; use overflow or a More dropdown on mobile rather than an endlessly scrolling row.
+- [x] Keep the toolbar accessible with aria-label, active states, keyboard focus, and text-selection preservation when clicking controls.
+- [x] Viewer mode remains read-only. Editor/owner may format.
+- [x] **Critical:** extend the shared Tiptap schema/content validation to accept only the new supported marks/attributes (textStyle, color, highlight, textAlign, font size, etc.); use a bounded palette/whitelist rather than arbitrary CSS. Confirm JSON round-trip and autosave across reload. Ensure the import pipeline can coexist with this schema.
+- [x] Do not register duplicate Tiptap extensions. Prefer matching Tiptap v3 extensions: `@tiptap/extension-highlight`, `@tiptap/extension-text-align`, `@tiptap/extension-text-style` (TextStyleKit) where compatible with the installed version.
 
 ### P1 — Collapsible sidebar
 
-- [ ] Explicit sidebar toggle visible from all workspace pages (open/close).
-- [ ] On desktop, support expanded navigation and a compact/closed mode to give the editor more horizontal room. Use a compact icon rail only if it remains clear; otherwise fully collapse.
-- [ ] On mobile, preserve the accessible drawer behavior from Task 6 (focus trap, Escape to close, focus restoration, overlay).
-- [ ] No hydration mismatch from persistent client preferences; optional preference persistence only after hydration.
-- [ ] Preserve active navigation state, account menu access, and keyboard navigation.
+- [x] Explicit sidebar toggle visible from all workspace pages (open/close).
+- [x] On desktop, support expanded navigation and a compact/closed mode to give the editor more horizontal room. Use a compact icon rail only if it remains clear; otherwise fully collapse.
+- [x] On mobile, preserve the accessible drawer behavior from Task 6 (focus trap, Escape to close, focus restoration, overlay).
+- [x] No hydration mismatch from persistent client preferences; optional preference persistence only after hydration.
+- [x] Preserve active navigation state, account menu access, and keyboard navigation.
 
 ### P1 — Working document search
 
-- [ ] Wire the existing dashboard search field; search document titles case-insensitively with clear/reset and a proper no-results state.
-- [ ] Support both My Documents and Shared With Me (section-specific search or explicit scope switching).
-- [ ] If the current lists are small, filter the already-authorized loaded data client-side; do not create a new broad search endpoint. If server search is needed, it must respect Supabase RLS and current user identity.
-- [ ] Keyboard support: focus search, Esc clears, optional debounce if querying the server.
-- [ ] Search reflects rename, imports, copies, shares, revocations and deletions; never exposes private titles when users switch accounts.
+- [x] Wire the existing dashboard search field; search document titles case-insensitively with clear/reset and a proper no-results state.
+- [x] Support both My Documents and Shared With Me (section-specific search or explicit scope switching).
+- [x] If the current lists are small, filter the already-authorized loaded data client-side; do not create a new broad search endpoint. If server search is needed, it must respect Supabase RLS and current user identity.
+- [x] Keyboard support: focus search, Esc clears, optional debounce if querying the server.
+- [x] Search reflects rename, imports, copies, shares, revocations and deletions; never exposes private titles when users switch accounts.
 
 ### P1 — Document actions menu
 
-- [ ] A "…" menu on document rows and/or the document editor header: Rename (reuse existing), Make a copy, Download, Copy link, Delete (owner only).
-- [ ] **Make a copy:** create a new document owned by the authenticated current user, preserving title/content JSON and formatting, with a distinct title such as "Copy of …". Confirm permissions before cloning; do not copy share permissions or transfer ownership.
-- [ ] **Download:** start with `.txt` and `.md` exports from authorized content. Respect permissions. Use safe filenames. If local edits are pending, save first or clearly say the export is from the latest saved state.
-- [ ] **Copy link:** copy the current document URL; explicitly note that the link itself grants no access and recipients still require a share invitation.
-- [ ] **Delete:** owner-only, with a confirmation dialog naming the document and a clear permanent-delete warning (no Trash in this scope); remove the document and cascading share records, return to the dashboard, show success/error feedback. Prevent deletion of someone else's document through both Server Actions and RLS.
-- [ ] On Shared With Me, limit actions according to role; don't present actions users can't perform. Defaults for this slice: owner may delete; owner/editor may duplicate and export; viewer may copy link and read only. Document these defaults.
+- [x] A "…" menu on document rows and/or the document editor header: Rename (reuse existing), Make a copy, Download, Copy link, Delete (owner only).
+- [x] **Make a copy:** create a new document owned by the authenticated current user, preserving title/content JSON and formatting, with a distinct title such as "Copy of …". Confirm permissions before cloning; do not copy share permissions or transfer ownership.
+- [x] **Download:** start with `.txt` and `.md` exports from authorized content. Respect permissions. Use safe filenames. If local edits are pending, save first or clearly say the export is from the latest saved state.
+- [x] **Copy link:** copy the current document URL; explicitly note that the link itself grants no access and recipients still require a share invitation.
+- [x] **Delete:** owner-only, with a confirmation dialog naming the document and a clear permanent-delete warning (no Trash in this scope); remove the document and cascading share records, return to the dashboard, show success/error feedback. Prevent deletion of someone else's document through both Server Actions and RLS.
+- [x] On Shared With Me, limit actions according to role; don't present actions users can't perform. Defaults for this slice: owner may delete; owner/editor may duplicate and export; viewer may copy link and read only. Document these defaults.
 
 ### P1 — Import `.docx` into an editable document
 
-- [ ] Extend the Import File UI to `.txt`, `.md`, and `.docx`.
-- [ ] Parse `.docx` on the server and convert it into the same supported Tiptap JSON schema. Reuse the authenticated, owner-only, single-insert import pipeline and the existing title/validation/error handling.
-- [ ] Preserve, best effort, paragraphs, H1/H2, bold, italic, underline and lists; alignment and colors where safely supported. Document conversion fidelity limits (tables, images, headers, comments, page layout, unsupported typography).
-- [ ] Use a maintained free/open-source converter such as mammoth for DOCX-to-semantic HTML, but never render unsanitized converter HTML. Strip/reject scripts, event handlers, unsupported nodes, URLs and embedded images; transform only an explicit allowlist of content into Tiptap JSON and validate again.
-- [ ] Keep external file access disabled. Limit `.docx` input (suggested 2 MB maximum, configurable) and the resulting JSON size (existing 500 KB document limit). Reject broken or suspicious archives, oversized decompression and excessive complexity as appropriate.
-- [ ] Invalid files or conversion failures must not create database rows. Do not store the original raw files. No paid conversion APIs.
-- [ ] Update the import hint, file picker, README, and sample files. The legacy `.doc` format remains unsupported.
+- [x] Extend the Import File UI to `.txt`, `.md`, and `.docx`.
+- [x] Parse `.docx` on the server and convert it into the same supported Tiptap JSON schema. Reuse the authenticated, owner-only, single-insert import pipeline and the existing title/validation/error handling.
+- [x] Preserve, best effort, paragraphs, H1/H2, bold, italic, underline and lists; alignment and colors where safely supported. Document conversion fidelity limits (tables, images, headers, comments, page layout, unsupported typography).
+- [x] Use a maintained free/open-source converter such as mammoth for DOCX-to-semantic HTML, but never render unsanitized converter HTML. Strip/reject scripts, event handlers, unsupported nodes, URLs and embedded images; transform only an explicit allowlist of content into Tiptap JSON and validate again.
+- [x] Keep external file access disabled. Limit `.docx` input (suggested 2 MB maximum, configurable) and the resulting JSON size (existing 500 KB document limit). Reject broken or suspicious archives, oversized decompression and excessive complexity as appropriate.
+- [x] Invalid files or conversion failures must not create database rows. Do not store the original raw files. No paid conversion APIs.
+- [x] Update the import hint, file picker, README, and sample files. The legacy `.doc` format remains unsupported.
 
 ### P2 — Additional polish from the Task 6 report
 
-- [ ] Investigate the remaining ~0.1-second stale-dashboard flash during back navigation; fix without weakening access control or regressing responsiveness.
-- [ ] Consider cross-tab logout propagation (e.g. BroadcastChannel or the storage event) without putting private data in messages; don't spend excessive time.
-- [ ] Manually verify edge cases not covered by the Task 6 browser run: expired session while editing, offline autosave/retry, title rename via real focus/blur, native dialog Escape, import regression after recent fixes.
-- [ ] Verify 375/768/1440 px layouts after the toolbar and sidebar changes; fix sticky toolbar/header offsets if required.
-- [ ] Preserve accessible modal focus behavior, mobile drawer focus handling, and minimum contrast.
+- [x] Investigate the remaining ~0.1-second stale-dashboard flash during back navigation; fix without weakening access control or regressing responsiveness.
+- [x] Consider cross-tab logout propagation (e.g. BroadcastChannel or the storage event) without putting private data in messages; don't spend excessive time.
+- [ ] Manually verify edge cases not covered by the Task 6 browser run: expired session while editing, offline autosave/retry, title rename via real focus/blur, native dialog Escape, import regression after recent fixes. (Partially covered: rename via React `onBlur` and `.docx` import verified in this pass; session/offline/Escape still open on the checklist.)
+- [x] Verify 375/768/1440 px layouts after the toolbar and sidebar changes; fix sticky toolbar/header offsets if required.
+- [x] Preserve accessible modal focus behavior, mobile drawer focus handling, and minimum contrast (carried forward from Task 6 / earlier slices; re-checked with layout pass).
 
 ## Regressions and acceptance checks
 
@@ -150,4 +148,13 @@ The original assessment requires a public live URL and a 3–5 minute walkthroug
 - Best-effort conversion: Title/H1/H2, bold/italic/underline/strike, nested lists, quotes, alignment, tables flattened to ` | `, link text kept without URLs. Fonts, colors, sizes, images, comments, and H3+ are dropped. Legacy `.doc` is rejected with a clear message. Limit: 1 MB upload (under the default Server Action body size).
 - Verified in the browser with [`sample.docx`](../sample.docx): opened as title `sample` with headings, marks, lists, quote, and flattened table; no scripts/URLs in content. Damaged `.docx` creates no row (unit-tested).
 - Tests: 304/304 in 12 files (including the checked-in `sample.docx` fixture); lint, tsc, build clean. RLS live suite not re-run for this slice (import uses the same owner-only insert path; no policy change).
+
+### Slice 6 — Final polish
+
+- Dashboard return path: `useRefreshOnReturn` runs `router.refresh()` inside `useLayoutEffect` + `useTransition`, and the list sections show their loading placeholders while the transition is pending so previous titles are not painted. Browser check: after rename + Back, the old title never appeared; the new title showed once data arrived.
+- Cross-tab sign-out: `BroadcastChannel("folio-session")` posts `{ type: "signed-out" }` only (no emails, tokens, or document data). Other signed-in tabs replace the page with `/login`.
+- Layouts after toolbar/sidebar work: at 375 / 768 / 1440 px, no horizontal overflow; sticky toolbar offsets matched header height (109 px mobile, 61 px from `sm` up); desktop sidebar 256 px at 1440.
+- Docs: [`architecture.md`](architecture.md), [`ai-workflow.md`](ai-workflow.md), [`submission.md`](submission.md) (public URL and walkthrough video still pending).
+- Validation this slice: lint 0, `tsc --noEmit` 0, Vitest **305/305** in 12 files, `npm run build` 0. Hosted RLS not re-run (no policy or data-access permission changes).
+- Still open for a human pass: expired-session-while-editing, offline autosave/retry, native dialog Escape, and a focused clipboard "Copy link" check (automation often lacks window focus).
 

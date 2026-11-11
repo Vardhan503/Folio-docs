@@ -10,6 +10,7 @@ This repository currently contains:
 - **Task 4:** importing `.txt` and `.md` files as new documents.
 - **Task 5:** sharing documents with other registered users as viewers or editors, and the Shared With Me dashboard.
 - **Task 6:** a quality, security, and usability pass: sign-out and account-switch privacy, refreshing preserved pages, clearer save failures, accessibility fixes, more tests, a live RLS check, and a [QA checklist](docs/qa-checklist.md).
+- **Product improvements:** collapsible sidebar, title search, extended formatting toolbar, document actions (copy / download / delete), `.docx` import, and final polish — see [`docs/PRODUCT_IMPROVEMENTS.md`](docs/PRODUCT_IMPROVEMENTS.md). Submission status (public URL and walkthrough video) is in [`docs/submission.md`](docs/submission.md).
 
 ## Tech stack
 
@@ -340,7 +341,8 @@ Then follow [Testing sharing with two users](#testing-sharing-with-two-users) an
 - **Personal content is never cached across users.** With Cache Components, the user's name and document list are read at request time inside `<Suspense>` boundaries; only the generic page shell is prerendered.
 - **Sign-out ends with a full page load.** Next.js keeps previously visited pages mounted but hidden (React `<Activity>`) so Back is instant. After sign-out those hidden pages would still hold the previous user's documents, so the account menu calls the sign-out action and then replaces the page with `/login` using a full browser navigation. That discards the router cache and every hidden page; the browser Back button then makes a fresh request, which the proxy redirects to `/login`. If Supabase can't be reached during sign-out, the server deletes the Supabase auth cookies itself, so the session still ends locally.
 - **Account switches reload the page.** [`SessionBoundary`](src/components/auth/SessionBoundary.tsx) remembers which user the current page was rendered for. If a different user (or nobody) is seen without a full page load, for example after signing in as someone else in another tab, it reloads the page. Pages restored from the browser's back-forward cache while signed in are reloaded too, so they're checked against the current session.
-- **Hidden pages refresh when shown again.** [`RefreshOnReturn`](src/components/documents/RefreshOnReturn.tsx) on the dashboards calls `router.refresh()` when a preserved page becomes visible again, so renames, new documents, imports, new shares, and revocations appear without disabling caching. The document page remounts its editor when your role changes. The Share dialog closes when its page is hidden, so it can't leave the next page blocked.
+- **Hidden pages refresh when shown again.** Dashboards call `router.refresh()` in a layout-effect transition when a preserved page becomes visible again, and show list placeholders while that refresh is pending so old titles aren't painted. Caching stays enabled. The document page remounts its editor when your role changes. The Share dialog closes when its page is hidden, so it can't leave the next page blocked.
+- **Sign-out reaches other tabs.** After a successful sign-out the account menu posts `{ type: "signed-out" }` on a `BroadcastChannel` (event name only). Other signed-in tabs navigate to `/login`.
 - **Action arguments aren't logged.** `logging.serverFunctions` is off in [`next.config.ts`](next.config.ts), because the dev server would otherwise print document content and email addresses passed to Server Actions.
 
 ## How row-level security works
@@ -378,7 +380,7 @@ src/
     layout/                    AppShell, AppSidebar, AppHeader, FolioLogo
     documents/                 DocumentDashboard, DocumentSection, DocumentList (linked rows),
                                CreateDocumentButton, ImportFileButton, LocalDateTime, EmptyState,
-                               RefreshOnReturn (refreshes a preserved page when it's shown again),
+                               RefreshOnReturn (useRefreshOnReturn: transition refresh on return),
                                DocumentActionsMenu (copy, download, copy link, delete dialog)
     feedback/NoticeProvider.tsx  Confirmation messages that survive a navigation
     search/                    SearchProvider (per-page title query), HeaderSearch
@@ -438,7 +440,12 @@ supabase/
   migrations/003_document_sharing.sql   Sharing policies, private helpers, column privileges
   tests/003_document_sharing_rls.sql    Self-checking RLS test (run manually, rolls back)
 scripts/rls-live-check.mjs     Live two-user RLS check through the Data API (npm run test:rls-live)
-docs/qa-checklist.md           Manual QA checklist
+docs/
+  PRODUCT_IMPROVEMENTS.md      Backlog and verified progress
+  qa-checklist.md              Manual QA checklist
+  architecture.md              Short system overview
+  ai-workflow.md               How Cursor agents were used
+  submission.md                Public URL / video status (still pending)
 vitest.config.mts              Test config (path alias, server-only stub)
 ```
 
@@ -465,8 +472,8 @@ vitest.config.mts              Test config (path alias, server-only stub)
 - Only the in-app Back link asks before leaving with unsaved changes. Sidebar links rely on the final best-effort save, and closing or reloading the tab uses the browser's prompt.
 - There is no realtime collaboration. Opening the same document in two tabs or by two people is last-write-wins across sessions; there is no conflict detection.
 - There is no version history and no comments. Downloads are `.txt` and `.md` only (no PDF or DOCX), and Markdown can't carry colors, font sizes, or alignment.
-- After editing, going back to a dashboard shows its previous titles and order for a moment (about a tenth of a second in testing) before the refresh replaces them.
-- Signing out in another tab isn't noticed by an open tab until it next talks to the server (a navigation, save, or reload). That request is then refused and the tab goes to `/login`, or the save fails with "session expired".
+- Going back to a dashboard shows loading placeholders while server data refreshes; if the refresh is slow, that placeholder state lasts until it finishes.
+- If `BroadcastChannel` is unavailable, signing out in another tab isn't noticed until the open tab next talks to the server.
 - Deletion is permanent; there is no trash or undo.
 - The document actions menu is on the document page only, not on dashboard rows.
 - The editor only supports the formats listed above; links, images, tables, font families, and custom colors are not available. Pasted formatting outside the palette and size list is dropped.

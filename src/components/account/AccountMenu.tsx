@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { ChevronDown, Loader2, LogOut } from "lucide-react";
 import type { AccountSummary } from "@/lib/account";
+import { SESSION_SYNC_CHANNEL } from "@/lib/auth/session-boundary";
 
 type AccountMenuProps = {
   account: AccountSummary;
@@ -82,6 +83,15 @@ export function AccountMenu({ account, signOutAction }: AccountMenuProps) {
               try {
                 await signOutAction();
               } finally {
+                // Tell other tabs to leave too. The message is only an event
+                // name — no emails, tokens, or document data.
+                try {
+                  const channel = new BroadcastChannel(SESSION_SYNC_CHANNEL);
+                  channel.postMessage({ type: "signed-out" });
+                  channel.close();
+                } catch {
+                  // BroadcastChannel can be missing or blocked; this tab still signs out.
+                }
                 // A full page load, not router navigation: it discards the
                 // router cache and the hidden pages it keeps for Back/Forward.
                 window.location.replace("/login");
