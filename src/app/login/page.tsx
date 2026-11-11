@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { LoginForm } from "@/app/login/LoginForm";
+import { SessionBoundary } from "@/components/auth/SessionBoundary";
 import { FolioLogo } from "@/components/layout/FolioLogo";
 
 export const metadata: Metadata = {
@@ -9,6 +10,7 @@ export const metadata: Metadata = {
 export default function LoginPage() {
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center px-4 py-12">
+      <SessionBoundary userId={null} />
       <div className="w-full max-w-sm">
         <div className="mb-8 flex justify-center">
           <FolioLogo linked={false} />

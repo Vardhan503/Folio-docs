@@ -8,7 +8,8 @@ type SaveStatusIndicatorProps = {
   status: SaveStatus;
   error: string | null;
   lastSavedAt: string;
-  onRetry: () => void;
+  /** Omitted when retrying can't succeed. */
+  onRetry?: () => void;
 };
 
 const timeFormatter = new Intl.DateTimeFormat(undefined, {
@@ -66,7 +67,7 @@ export function SaveStatusIndicator({
           </>
         )}
       </p>
-      {status === "error" ? (
+      {status === "error" && onRetry ? (
         <button
           type="button"
           onClick={onRetry}

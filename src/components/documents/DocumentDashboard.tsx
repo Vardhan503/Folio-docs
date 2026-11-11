@@ -3,6 +3,7 @@ import { CreateDocumentButton } from "@/components/documents/CreateDocumentButto
 import { DocumentSection } from "@/components/documents/DocumentSection";
 import { EmptyState } from "@/components/documents/EmptyState";
 import { ImportFileButton } from "@/components/documents/ImportFileButton";
+import { RefreshOnReturn } from "@/components/documents/RefreshOnReturn";
 import { IMPORT_FORMATS_HINT } from "@/lib/import/file-rules";
 import type { DocumentSummary } from "@/types/document";
 
@@ -46,6 +47,7 @@ export function DocumentDashboard({
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+      {isLoading ? null : <RefreshOnReturn />}
       <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between md:gap-8">
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight text-ink sm:text-[28px]">

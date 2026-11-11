@@ -46,7 +46,7 @@ export function DocumentEditor({
     return current.getJSON();
   }, []);
 
-  const { status, error, lastSavedAt, hasUnsavedChanges, markDirty, saveNow } =
+  const { status, error, retryable, lastSavedAt, hasUnsavedChanges, markDirty, saveNow } =
     useAutosave({ documentId, initialSavedAt: initialUpdatedAt, getContent });
 
   const editor = useEditor({
@@ -108,7 +108,7 @@ export function DocumentEditor({
               status={status}
               error={error}
               lastSavedAt={lastSavedAt}
-              onRetry={() => void saveNow()}
+              onRetry={retryable ? () => void saveNow() : undefined}
             />
           ) : null}
           {role === "editor" ? (
@@ -142,7 +142,10 @@ export function DocumentEditor({
         >
           <AlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
           <p>
-            {error} Your edits are still here. Keep this tab open and use Retry.
+            {error}{" "}
+            {retryable
+              ? "Your edits are still here. Keep this tab open and use Retry."
+              : "Recent edits weren't saved. Copy anything you want to keep before leaving this page."}
           </p>
         </div>
       ) : null}

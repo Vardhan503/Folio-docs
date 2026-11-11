@@ -17,13 +17,19 @@ export function AppShell({ workspaceName, account, children }: AppShellProps) {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   const openNavigation = useCallback(() => setIsNavigationOpen(true), []);
+  const restoreFocusRef = useRef(false);
   const closeNavigation = useCallback(() => {
+    restoreFocusRef.current = true;
     setIsNavigationOpen(false);
-    menuButtonRef.current?.focus();
   }, []);
 
   useEffect(() => {
-    if (!isNavigationOpen) return;
+    if (!isNavigationOpen) {
+      // The menu button is inert until the drawer closes, so focus it afterwards.
+      if (restoreFocusRef.current) menuButtonRef.current?.focus();
+      restoreFocusRef.current = false;
+      return;
+    }
 
     closeButtonRef.current?.focus();
 
@@ -38,6 +44,7 @@ export function AppShell({ workspaceName, account, children }: AppShellProps) {
     <div className="flex min-h-dvh">
       <a
         href="#main-content"
+        inert={isNavigationOpen}
         className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-lg focus:bg-surface focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:shadow-md focus:outline-2 focus:outline-accent"
       >
         Skip to content
@@ -75,7 +82,7 @@ export function AppShell({ workspaceName, account, children }: AppShellProps) {
         </div>
       ) : null}
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col" inert={isNavigationOpen}>
         <AppHeader
           workspaceName={workspaceName}
           account={account}

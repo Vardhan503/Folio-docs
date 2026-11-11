@@ -77,7 +77,17 @@ export function AccountMenu({ account, signOutAction }: AccountMenuProps) {
             </div>
           </div>
           <div className="my-1 border-t border-line" />
-          <form action={signOutAction}>
+          <form
+            action={async () => {
+              try {
+                await signOutAction();
+              } finally {
+                // A full page load, not router navigation: it discards the
+                // router cache and the hidden pages it keeps for Back/Forward.
+                window.location.replace("/login");
+              }
+            }}
+          >
             <SignOutButton />
           </form>
         </div>

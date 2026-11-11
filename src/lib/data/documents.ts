@@ -74,7 +74,7 @@ export async function resolveDocumentRole(
       "We couldn't check your access to this document. Please try again.",
     );
   }
-  const role = data ? roleFromAccessRow(data as AccessRow, userId) : null;
+  const role = data ? roleFromAccessRow(data satisfies AccessRow, userId) : null;
   return role ? success(role) : notFound();
 }
 
@@ -206,7 +206,7 @@ export async function getDocumentById(
       "We couldn't load this document. Refresh the page to try again.",
     );
   }
-  const role = data ? roleFromAccessRow(data as AccessRow, user.id) : null;
+  const role = data ? roleFromAccessRow(data satisfies AccessRow, user.id) : null;
   if (!data || !role) return notFound();
 
   return success({

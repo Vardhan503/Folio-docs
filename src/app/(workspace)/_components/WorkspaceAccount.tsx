@@ -1,4 +1,5 @@
 import { AccountMenu } from "@/components/account/AccountMenu";
+import { SessionBoundary } from "@/components/auth/SessionBoundary";
 import { buildAccountSummary } from "@/lib/account";
 import { signOut } from "@/lib/auth/actions";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -16,5 +17,10 @@ export async function WorkspaceAccount() {
     profile?.email ?? user.email,
   );
 
-  return <AccountMenu account={account} signOutAction={signOut} />;
+  return (
+    <>
+      <SessionBoundary userId={user.id} />
+      <AccountMenu account={account} signOutAction={signOut} />
+    </>
+  );
 }

@@ -9,6 +9,7 @@ This repository currently contains:
 - **Task 3:** creating documents, rich-text editing with Tiptap, renaming, autosave, and reopening saved documents.
 - **Task 4:** importing `.txt` and `.md` files as new documents.
 - **Task 5:** sharing documents with other registered users as viewers or editors, and the Shared With Me dashboard.
+- **Task 6:** a quality, security, and usability pass: sign-out and account-switch privacy, refreshing preserved pages, clearer save failures, accessibility fixes, more tests, a live RLS check, and a [QA checklist](docs/qa-checklist.md).
 
 ## Tech stack
 
@@ -83,6 +84,7 @@ Open [http://localhost:3000](http://localhost:3000). You will be redirected to `
 | `npx tsc --noEmit` | Type-check the project     |
 | `npm run test`     | Run Vitest in watch mode   |
 | `npm run test -- --run` | Run the tests once (CI) |
+| `npm run test:rls-live` | Check RLS against your live project with two real users (see [Tests](#tests)) |
 | `npm run build`    | Create a production build  |
 | `npm start`        | Serve the production build |
 
@@ -103,7 +105,7 @@ Click the title to rename it. It saves when the field loses focus or you press E
 - Every edit bumps a local revision number and restarts a 900 ms debounce timer, so typing doesn't hit the database on every keystroke.
 - When the timer fires, the editor's JSON (`editor.getJSON()`) is sent to a Server Action. Only one content save is in flight at a time; edits made meanwhile are sent in a follow-up save with the latest content, so an older save can never overwrite a newer one.
 - The status reads **Unsaved changes**, **Saving…**, **All changes saved** (with the last save time), or **Save failed**. "All changes saved" only appears once the latest revision has been stored.
-- On failure, edits stay in the editor, a Retry button appears, and the next edit retries automatically. `Ctrl/⌘+S` saves immediately.
+- On failure, edits stay in the editor and the status never claims they were saved. For failures that a retry can fix (network or database errors, an expired session after signing in again in another tab), a Retry button appears and the next edit retries automatically. If the document is gone or your access was revoked or reduced to view-only, there's no Retry; the message tells you to copy anything you want to keep. `Ctrl/⌘+S` saves immediately.
 - Leaving with unsaved changes triggers the browser's "leave page?" prompt; the in-app Back link asks for confirmation. If you navigate away inside the app, a final best-effort save is sent.
 - Title and content are saved by separate actions that update separate columns, so renaming never overwrites content and vice versa.
 
@@ -203,7 +205,7 @@ Migration 003 is not applied automatically. Apply it yourself once per Supabase 
 
 The migration only adds functions, policies, and column privileges and drops one policy; it doesn't change or delete any rows or existing owner policies.
 
-To check the policies against your project, open [`supabase/tests/003_document_sharing_rls.sql`](supabase/tests/003_document_sharing_rls.sql), replace the two placeholder emails at the top with your demo users' emails, and run it in the SQL editor. It runs 37 checks, switching the second user through unshared, viewer, editor, and revoked access and also testing anonymous access, inside a transaction that is rolled back, so it leaves no data behind, and ends with `ALL SHARING RLS CHECKS PASSED` or stops at the first failing check.
+To check the policies against your project, open [`supabase/tests/003_document_sharing_rls.sql`](supabase/tests/003_document_sharing_rls.sql), replace the two placeholder emails at the top with your demo users' emails, and run it in the SQL editor. It runs 43 checks, switching the second user through unshared, viewer, editor, and revoked access and also testing anonymous access, inside a transaction that is rolled back, so it leaves no data behind, and ends with `ALL SHARING RLS CHECKS PASSED` or stops at the first failing check.
 
 ### Security model
 
@@ -221,13 +223,13 @@ After applying migration 003 and creating two users (called A and B here):
 
 1. Sign in as A, create a document, type some text, and click **Share**. Share it with B's email as **Viewer**.
 2. In a private window, sign in as B. The document appears on **Shared With Me** with a Viewer badge. Open it: it's read-only and shows "View only".
-3. As A, change B to **Editor**. B reloads the document, sees the toolbar, edits the text and the title, and waits for "Saved". A reloads and sees B's changes.
+3. As A, change B to **Editor**. B reloads the document, sees the toolbar, edits the text and the title, and waits for "All changes saved". A reloads and sees B's changes.
 4. As A, click **Remove** next to B and confirm. B reloads: the document is gone from Shared With Me and opening its URL shows "Document not found". If B still had it open, their next save fails with a clear message.
 5. Also try sharing with A's own email, an unknown email, and B again while B already has access; each shows an inline error.
 
 ### Sharing limitations
 
-- There is no realtime sync. Changes made by other people, and changes to your own access, show up when you reload. Two people editing at once is last-write-wins.
+- There is no realtime sync. Changes made by other people, and changes to your own access, show up when you reload or navigate back to a page. Two people editing at once is last-write-wins.
 - Revoking access stops future loads and saves, but can't remove content that's already open in the other person's browser.
 - Only registered users can be added, by exact email. The dialog tells the owner whether an email has a Folio account; that's necessary to share, but it does reveal account existence to document owners.
 - Ownership can't be transferred, and collaborators can't remove themselves from a document.
@@ -245,9 +247,24 @@ Vitest runs in Node with no network access or Supabase credentials:
 - [`src/lib/documents/editor-content.test.ts`](src/lib/documents/editor-content.test.ts) builds documents with the editor's real schema and checks they pass validation directly and after the JSON round trip used by autosave.
 - [`src/lib/data/documents.test.ts`](src/lib/data/documents.test.ts) mocks the session and Supabase client to check that each operation uses the verified user's ID as owner, checks edit access before saving, rejects bad input without touching the database, reports expired sessions, treats rows hidden by RLS as not found, and hides database error details. The import tests also check that a successful import makes exactly one insert, and that failed validation or conversion makes none.
 - [`src/lib/import/import.test.ts`](src/lib/import/import.test.ts) covers file rules (extensions, empty and oversized files, invalid UTF-8, binary content, file-name titles) and pins the exact JSON produced for plain text and for each supported and unsupported Markdown construct, because `@tiptap/markdown` is still in beta.
+- [`src/components/editor/autosave-controller.test.ts`](src/components/editor/autosave-controller.test.ts) drives the autosave state machine with fake timers: debouncing, one save in flight with the newest content sent last, "saved" only once the latest revision is stored, failures for expired sessions, revoked access, view-only access, and database errors (edits kept, never shown as saved, Retry offered only when it can help), network failures followed by a successful retry, no saves when nothing was edited, and the final save when leaving the page.
+- [`src/lib/server-actions.test.ts`](src/lib/server-actions.test.ts) checks that every document, sharing, and auth Server Action refuses a signed-out caller before touching Supabase, that sign-out clears only Supabase auth cookies when Supabase can't be reached (without logging cookie values), and the rule that reloads the page when the signed-in user changes.
 - [`src/lib/data/sharing.test.ts`](src/lib/data/sharing.test.ts) covers sharing with the same mocks: owner, editor, and viewer roles when opening a document; unshared users treated as not found; editors saving and viewers refused (including an editor downgraded between saves); invalid document IDs, roles, and emails; sharing with yourself; unknown emails; duplicate shares; owner-only management of shares; permission changes; revocation; expired sessions; generic error messages; and update payloads that never contain `owner_id`. It also reads migration 003 to check the column-level update grants and that SECURITY DEFINER functions live in the `private` schema with an empty `search_path`.
 
-These tests check the application logic only. Mocked tests can't prove the live RLS policies are correct. For that, run [`supabase/tests/003_document_sharing_rls.sql`](supabase/tests/003_document_sharing_rls.sql) in the Supabase SQL editor (see [Applying the sharing migration](#applying-the-sharing-migration)) and follow [Testing sharing with two users](#testing-sharing-with-two-users).
+That's 209 tests in 7 files. They check the application logic only; mocked tests can't prove the live RLS policies are correct. There are two ways to check the real database:
+
+- **SQL suite.** Run [`supabase/tests/003_document_sharing_rls.sql`](supabase/tests/003_document_sharing_rls.sql) in the Supabase SQL editor (see [Applying the sharing migration](#applying-the-sharing-migration)). It tests the policies directly in Postgres and rolls back.
+- **Live API check.** [`scripts/rls-live-check.mjs`](scripts/rls-live-check.mjs) signs in as two real users with the publishable key, exactly as the app does, and runs 33 checks through the Supabase Data API: unshared, viewer, editor, revoked, and anonymous access, ownership changes, and who may manage shares. It creates one temporary document owned by the first user and deletes it at the end. Credentials come only from environment variables:
+
+  ```bash
+  FOLIO_OWNER_EMAIL=... FOLIO_OWNER_PASSWORD=... \
+  FOLIO_COLLABORATOR_EMAIL=... FOLIO_COLLABORATOR_PASSWORD=... \
+  npm run test:rls-live
+  ```
+
+  It reads the project URL and publishable key from `.env.local` and exits non-zero if any check fails.
+
+Then follow [Testing sharing with two users](#testing-sharing-with-two-users) and the manual checklist in [`docs/qa-checklist.md`](docs/qa-checklist.md).
 
 ## How authentication works
 
@@ -256,6 +273,10 @@ These tests check the application logic only. Mocked tests can't prove the live 
 - **The server re-verifies before reading data.** The proxy is not the only check. [`getCurrentUser()`](src/lib/auth/session.ts) verifies the token again with `getClaims()` (never trusting an unverified `getSession()`), and every data-access function calls it before querying. If verification fails, page loads redirect to `/login`, while mutations such as autosave use `getOptionalUser()` and return an `unauthenticated` error instead, so unsaved edits aren't lost to a redirect.
 - **Sign-in and sign-out are Server Actions** in [`src/lib/auth/actions.ts`](src/lib/auth/actions.ts). Sign-in validates input on both client and server, calls `signInWithPassword`, and maps Supabase errors to plain messages. Passwords and tokens are never logged or returned to the client.
 - **Personal content is never cached across users.** With Cache Components, the user's name and document list are read at request time inside `<Suspense>` boundaries; only the generic page shell is prerendered.
+- **Sign-out ends with a full page load.** Next.js keeps previously visited pages mounted but hidden (React `<Activity>`) so Back is instant. After sign-out those hidden pages would still hold the previous user's documents, so the account menu calls the sign-out action and then replaces the page with `/login` using a full browser navigation. That discards the router cache and every hidden page; the browser Back button then makes a fresh request, which the proxy redirects to `/login`. If Supabase can't be reached during sign-out, the server deletes the Supabase auth cookies itself, so the session still ends locally.
+- **Account switches reload the page.** [`SessionBoundary`](src/components/auth/SessionBoundary.tsx) remembers which user the current page was rendered for. If a different user (or nobody) is seen without a full page load, for example after signing in as someone else in another tab, it reloads the page. Pages restored from the browser's back-forward cache while signed in are reloaded too, so they're checked against the current session.
+- **Hidden pages refresh when shown again.** [`RefreshOnReturn`](src/components/documents/RefreshOnReturn.tsx) on the dashboards calls `router.refresh()` when a preserved page becomes visible again, so renames, new documents, imports, new shares, and revocations appear without disabling caching. The document page remounts its editor when your role changes. The Share dialog closes when its page is hidden, so it can't leave the next page blocked.
+- **Action arguments aren't logged.** `logging.serverFunctions` is off in [`next.config.ts`](next.config.ts), because the dev server would otherwise print document content and email addresses passed to Server Actions.
 
 ## How row-level security works
 
@@ -287,16 +308,19 @@ src/
       _components/
         WorkspaceAccount.tsx   Loads the profile and renders the account menu
   components/
-    account/AccountMenu.tsx    Initials avatar, name/email, Sign out
+    account/AccountMenu.tsx    Initials avatar, name/email, Sign out (full page load afterwards)
+    auth/SessionBoundary.tsx   Reloads the page if the signed-in user changes without one
     layout/                    AppShell, AppSidebar, AppHeader, FolioLogo
     documents/                 DocumentDashboard, DocumentSection, DocumentList (linked rows),
-                               CreateDocumentButton, ImportFileButton, LocalDateTime, EmptyState
+                               CreateDocumentButton, ImportFileButton, LocalDateTime, EmptyState,
+                               RefreshOnReturn (refreshes a preserved page when it's shown again)
     editor/
       DocumentEditor.tsx       Tiptap editor page: back link, title, toolbar, canvas, status
       EditorToolbar.tsx        Formatting buttons with active states
       DocumentTitleInput.tsx   Rename on blur/Enter with validation and retry
       SaveStatusIndicator.tsx  Unsaved / Saving / Saved / Failed + Retry
-      useAutosave.ts           Debounced, serialized content autosave
+      autosave-controller.ts   Debounced, serialized content autosave (framework-free, unit tested)
+      useAutosave.ts           React binding for the autosave controller
       DocumentEditorStates.tsx Loading skeleton and message states
       extensions.ts            Editor extensions (also the schema used to validate imports)
     sharing/ShareDialog.tsx    Owner-only Share button and dialog (add, change role, remove)
@@ -310,6 +334,7 @@ src/
     auth/
       session.ts               getCurrentUser(): verified identity or redirect
       actions.ts               signIn / signOut Server Actions
+      session-boundary.ts      Auth cookie and account-switch helpers
       validation.ts            Shared credential validation
     data/
       profiles.ts              getCurrentProfile()
@@ -336,6 +361,8 @@ supabase/
   migrations/002_document_constraints.sql
   migrations/003_document_sharing.sql   Sharing policies, private helpers, column privileges
   tests/003_document_sharing_rls.sql    Self-checking RLS test (run manually, rolls back)
+scripts/rls-live-check.mjs     Live two-user RLS check through the Data API (npm run test:rls-live)
+docs/qa-checklist.md           Manual QA checklist
 vitest.config.mts              Test config (path alias, server-only stub)
 ```
 
@@ -358,8 +385,10 @@ vitest.config.mts              Test config (path alias, server-only stub)
 ### Known limitations
 
 - Only the in-app Back link asks before leaving with unsaved changes. Sidebar links rely on the final best-effort save, and closing or reloading the tab uses the browser's prompt.
-- Opening the same document in two tabs is last-write-wins; there is no realtime sync or conflict detection.
-- After editing, using the browser's Back button may briefly show the dashboard's previous titles and order until the page is reloaded or revisited.
+- There is no realtime collaboration. Opening the same document in two tabs or by two people is last-write-wins across sessions; there is no conflict detection.
+- There is no version history, no comments, and no file export (PDF, DOCX, or Markdown).
+- After editing, going back to a dashboard shows its previous titles and order for a moment (about a tenth of a second in testing) before the refresh replaces them.
+- Signing out in another tab isn't noticed by an open tab until it next talks to the server (a navigation, save, or reload). That request is then refused and the tab goes to `/login`, or the save fails with "session expired".
 - Documents can't be deleted from the UI yet.
 - The editor only supports the formats listed above; links, images, and tables are not available.
 - Import accepts one `.txt` or `.md` file at a time, up to 250 KB, chosen with the file picker (no drag-and-drop). DOCX, PDF, and other formats aren't supported.

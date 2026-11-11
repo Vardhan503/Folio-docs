@@ -83,6 +83,16 @@ select set_config('test.doc_id', id::text, true) from created;
 select pg_temp.check(
   (select count(*) from public.documents where id = pg_temp.doc()) = 1,
   'owner reads own document');
+select pg_temp.check(
+  pg_temp.affected(format(
+    'update public.documents set content = %L::jsonb where id = %L',
+    '{"type":"doc","content":[{"type":"paragraph"}]}', pg_temp.doc())) = 1,
+  'owner edits own document');
+select pg_temp.check(
+  pg_temp.affected(format(
+    'insert into public.documents (owner_id, title) values (%L, %L)',
+    current_setting('test.collaborator_id'), 'Forged owner')) = -1,
+  'nobody can create a document owned by someone else');
 
 -- Before sharing, the collaborator has no access.
 select pg_temp.act_as('collaborator');
@@ -150,6 +160,11 @@ select pg_temp.check(
     '{"type":"doc","content":[]}', pg_temp.doc())) = 0,
   'viewer cannot edit content');
 select pg_temp.check(
+  pg_temp.affected(format(
+    'update public.documents set owner_id = %L where id = %L',
+    current_setting('test.collaborator_id'), pg_temp.doc())) = -1,
+  'viewer cannot change owner_id');
+select pg_temp.check(
   (select count(*) from public.document_shares where document_id = pg_temp.doc()) = 1,
   'viewer sees their own share');
 select pg_temp.check(
@@ -202,12 +217,26 @@ select pg_temp.check(
   'editor cannot change id');
 select pg_temp.check(
   pg_temp.affected(format(
+    'update public.documents set updated_at = now() - interval %L where id = %L',
+    '1 year', pg_temp.doc())) = -1,
+  'editor cannot set updated_at directly');
+select pg_temp.check(
+  pg_temp.affected(format(
     'delete from public.documents where id = %L', pg_temp.doc())) = 0,
   'editor cannot delete the document');
 select pg_temp.check(
   pg_temp.affected(format(
     'update public.document_shares set role = %L where document_id = %L', 'viewer', pg_temp.doc())) = 0,
   'editor cannot manage shares');
+select pg_temp.check(
+  pg_temp.affected(format(
+    'insert into public.document_shares (document_id, user_id, role) values (%L, %L, %L)',
+    pg_temp.doc(), current_setting('test.owner_id'), 'viewer')) = -1,
+  'editor cannot grant access');
+select pg_temp.check(
+  pg_temp.affected(format(
+    'delete from public.document_shares where document_id = %L', pg_temp.doc())) = 0,
+  'editor cannot revoke access');
 select pg_temp.check(
   pg_temp.affected(format(
     'select public.find_share_recipient(%L, %L)', pg_temp.doc(),

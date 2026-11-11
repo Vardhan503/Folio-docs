@@ -120,7 +120,7 @@ export async function listDocumentCollaborators(
 
   type Row = { user_id: string; role: string; profile: ProfileRef };
   return success(
-    (data as unknown as Row[])
+    (data satisfies Row[])
       .filter((row) => isShareRole(row.role))
       .map((row) => ({
         userId: row.user_id,
@@ -223,7 +223,7 @@ export async function listSharedDocuments(): Promise<DataResult<DocumentSummary[
   };
 
   return success(
-    (data as unknown as Row[])
+    (data satisfies Row[])
       .flatMap((row): DocumentSummary[] => {
         const document = row.document;
         if (!document || !isShareRole(row.role) || document.owner_id === user.id) return [];

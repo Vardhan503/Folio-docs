@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
   type FormEvent,
@@ -36,6 +37,13 @@ export function ShareButton({ documentId }: ShareButtonProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [isOpen, setIsOpen] = useState(false);
   const titleId = useId();
+
+  // When the page is hidden (navigating away keeps it mounted), close the modal:
+  // an open modal dialog would leave the visible page inert.
+  useLayoutEffect(() => {
+    const dialog = dialogRef.current;
+    return () => dialog?.close();
+  }, []);
 
   function open() {
     setIsOpen(true);
@@ -93,6 +101,7 @@ function SharePanel({ documentId, titleId, onClose }: SharePanelProps) {
   const [rowError, setRowError] = useState<{ userId: string; message: string } | null>(null);
   // One sharing request at a time, even if a click lands before React re-renders.
   const busyRef = useRef(false);
+  const emailRef = useRef<HTMLInputElement>(null);
   const emailId = useId();
   const roleId = useId();
   const formErrorId = useId();
@@ -197,6 +206,8 @@ function SharePanel({ documentId, titleId, onClose }: SharePanelProps) {
     if (!result) return;
     if (result.ok) {
       setNotice(`Removed access for ${collaborator.displayName}.`);
+      // The row (and the focused button) is gone; keep focus inside the dialog.
+      emailRef.current?.focus();
     } else {
       setRowError({ userId: collaborator.userId, message: result.error });
     }
@@ -232,6 +243,7 @@ function SharePanel({ documentId, titleId, onClose }: SharePanelProps) {
               Email address
             </label>
             <input
+              ref={emailRef}
               id={emailId}
               type="email"
               inputMode="email"
@@ -239,6 +251,7 @@ function SharePanel({ documentId, titleId, onClose }: SharePanelProps) {
               autoCapitalize="none"
               spellCheck={false}
               placeholder="name@example.com"
+              autoFocus
               value={email}
               onChange={(event) => {
                 setEmail(event.target.value);
@@ -401,6 +414,8 @@ function CollaboratorRow({
             </button>
             <button
               type="button"
+              // The Remove button that had focus was replaced by this prompt.
+              autoFocus
               onClick={onCancelRevoke}
               disabled={isBusy}
               className="inline-flex h-8 items-center rounded-lg border border-line-strong bg-surface px-2.5 text-xs font-medium text-ink hover:bg-canvas focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-60"

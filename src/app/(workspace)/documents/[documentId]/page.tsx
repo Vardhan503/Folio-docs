@@ -56,7 +56,8 @@ async function DocumentLoader({
 
   return (
     <DocumentEditor
-      key={result.data.id}
+      // Remount when access changes, e.g. an editor reopening after being made a viewer.
+      key={`${result.data.id}:${result.data.role}`}
       documentId={result.data.id}
       initialTitle={result.data.title}
       initialContent={content.value}

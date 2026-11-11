@@ -2,9 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { JSONContent } from "@tiptap/react";
+import {
+  createAutosaveController,
+  type AutosaveController,
+  type AutosaveSnapshot,
+} from "@/components/editor/autosave-controller";
 import { saveDocumentContentAction } from "@/lib/documents/actions";
 
-export type SaveStatus = "saved" | "unsaved" | "saving" | "error";
+export type { SaveStatus } from "@/components/editor/autosave-controller";
 
 type UseAutosaveOptions = {
   documentId: string;
@@ -14,130 +19,48 @@ type UseAutosaveOptions = {
   delayMs?: number;
 };
 
-const NETWORK_ERROR =
-  "We couldn't reach the server. Check your connection, then retry.";
-
-function readSerializedContent(getContent: () => JSONContent | null): string | null {
-  const content = getContent();
-  return content ? JSON.stringify(content) : null;
-}
-
-/**
- * Debounced, serialized autosave. Each edit bumps a local revision; at most one
- * save is in flight, and it always sends the latest content, so an older save
- * can never land after a newer one. "saved" means the latest revision persisted.
- */
+/** React binding for the autosave controller; see autosave-controller.ts for the save rules. */
 export function useAutosave({
   documentId,
   initialSavedAt,
   getContent,
   delayMs = 900,
 }: UseAutosaveOptions) {
-  const [status, setStatus] = useState<SaveStatus>("saved");
-  const [error, setError] = useState<string | null>(null);
-  const [lastSavedAt, setLastSavedAt] = useState(initialSavedAt);
-
-  const revisionRef = useRef(0);
-  const savedRevisionRef = useRef(0);
-  const inFlightRef = useRef(false);
-  const queuedRef = useRef(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const mountedRef = useRef(true);
-  const unmountContentRef = useRef<string | null>(null);
   const getContentRef = useRef(getContent);
-  const flushRef = useRef<() => Promise<void>>(async () => {});
+  const [snapshot, setSnapshot] = useState<AutosaveSnapshot>({
+    status: "saved",
+    error: null,
+    retryable: true,
+    lastSavedAt: initialSavedAt,
+  });
+  const controllerRef = useRef<AutosaveController | null>(null);
 
   useEffect(() => {
     getContentRef.current = getContent;
   }, [getContent]);
 
-  const flush = useCallback(async () => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-    if (inFlightRef.current) {
-      queuedRef.current = true;
-      return;
-    }
-    if (revisionRef.current === savedRevisionRef.current) return;
-
-    const content = readSerializedContent(getContentRef.current);
-    if (!content) return;
-
-    const revision = revisionRef.current;
-    inFlightRef.current = true;
-    setStatus("saving");
-    setError(null);
-
-    let result: Awaited<ReturnType<typeof saveDocumentContentAction>>;
-    try {
-      result = await saveDocumentContentAction(documentId, content);
-    } catch {
-      result = { ok: false, code: "server_error", error: NETWORK_ERROR };
-    }
-    inFlightRef.current = false;
-
-    if (result.ok) {
-      savedRevisionRef.current = Math.max(savedRevisionRef.current, revision);
-    }
-
-    if (!mountedRef.current) {
-      const pending = unmountContentRef.current;
-      unmountContentRef.current = null;
-      if (pending) void saveDocumentContentAction(documentId, pending);
-      return;
-    }
-
-    if (!result.ok) {
-      queuedRef.current = false;
-      setStatus("error");
-      setError(result.error);
-      return;
-    }
-
-    setLastSavedAt(result.data.updated_at);
-
-    if (revisionRef.current === savedRevisionRef.current) {
-      setStatus("saved");
-    } else if (queuedRef.current) {
-      queuedRef.current = false;
-      void flushRef.current();
-    } else {
-      setStatus("unsaved");
-    }
-  }, [documentId]);
-
   useEffect(() => {
-    flushRef.current = flush;
-  }, [flush]);
+    // Created once and kept while the page is hidden and shown again, so
+    // unsaved revisions survive; the editor is keyed by document.
+    controllerRef.current ??= createAutosaveController({
+      initialSavedAt,
+      delayMs,
+      save: (content) => saveDocumentContentAction(documentId, content),
+      getContent: () => {
+        const content = getContentRef.current();
+        return content ? JSON.stringify(content) : null;
+      },
+      onChange: setSnapshot,
+    });
+    const controller = controllerRef.current;
+    controller.attach();
+    return () => controller.detach();
+  }, [documentId, initialSavedAt, delayMs]);
 
-  const markDirty = useCallback(() => {
-    revisionRef.current += 1;
-    setStatus((current) => (current === "saving" ? current : "unsaved"));
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => void flushRef.current(), delayMs);
-  }, [delayMs]);
+  const markDirty = useCallback(() => controllerRef.current?.markDirty(), []);
+  const saveNow = useCallback(async () => controllerRef.current?.flush(), []);
 
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-      if (timerRef.current) clearTimeout(timerRef.current);
-      if (revisionRef.current === savedRevisionRef.current) return;
-
-      // Best effort: persist the final edits when leaving the page in-app.
-      const content = readSerializedContent(getContentRef.current);
-      if (!content) return;
-      if (inFlightRef.current) {
-        unmountContentRef.current = content;
-      } else {
-        void saveDocumentContentAction(documentId, content);
-      }
-    };
-  }, [documentId]);
-
-  const hasUnsavedChanges = status !== "saved";
+  const hasUnsavedChanges = snapshot.status !== "saved";
 
   useEffect(() => {
     if (!hasUnsavedChanges) return;
@@ -148,5 +71,13 @@ export function useAutosave({
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [hasUnsavedChanges]);
 
-  return { status, error, lastSavedAt, hasUnsavedChanges, markDirty, saveNow: flush };
+  return {
+    status: snapshot.status,
+    error: snapshot.error,
+    retryable: snapshot.retryable,
+    lastSavedAt: snapshot.lastSavedAt,
+    hasUnsavedChanges,
+    markDirty,
+    saveNow,
+  };
 }

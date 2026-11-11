@@ -1,7 +1,9 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import type { AuthError } from "@supabase/supabase-js";
+import { isSupabaseAuthCookie } from "@/lib/auth/session-boundary";
 import {
   hasErrors,
   validateCredentials,
@@ -47,13 +49,27 @@ export async function signIn(
   redirect("/");
 }
 
+/**
+ * Ends the session on the server. The caller must then do a full page load
+ * (see AccountMenu): a client-side redirect would keep the previous user's
+ * pages alive in the router's hidden <Activity> boundaries.
+ */
 export async function signOut(): Promise<void> {
-  const supabase = await createClient();
-  const { error } = await supabase.auth.signOut({ scope: "local" });
-  if (error) {
+  try {
+    const supabase = await createClient();
+    const { error } = await supabase.auth.signOut({ scope: "local" });
+    if (!error) return;
     console.error("Sign-out failed", { code: error.code, status: error.status });
+  } catch {
+    console.error("Sign-out failed", { code: "network_error" });
   }
-  redirect("/login");
+
+  // Supabase keeps the session if the sign-out request itself failed, so
+  // remove the auth cookies directly: this device must end up signed out.
+  const cookieStore = await cookies();
+  for (const { name } of cookieStore.getAll()) {
+    if (isSupabaseAuthCookie(name)) cookieStore.delete(name);
+  }
 }
 
 function describeAuthError(error: AuthError): string {
