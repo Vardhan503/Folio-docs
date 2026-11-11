@@ -96,7 +96,18 @@ Open [http://localhost:3000](http://localhost:3000). You will be redirected to `
 
 ### Editing and formatting
 
-The editor at `/documents/[documentId]` uses Tiptap v3 (`StarterKit` plus `Placeholder`). The toolbar offers undo/redo, normal text, Heading 1, Heading 2, bold, italic, underline, bulleted and numbered lists, and shows which formats are active. Toolbar buttons keep the text selection, and the usual shortcuts work (`Ctrl/⌘+B`, `I`, `U`, `Z`, `Shift+Z`, `Ctrl/⌘+Alt+1/2/0`, `Ctrl/⌘+Shift+7/8`). Markdown-style input such as `# `, `- `, and `1. ` also works.
+The editor at `/documents/[documentId]` uses Tiptap v3: `StarterKit`, `Placeholder`, and the official `TextStyle`, `Color`, `FontSize`, `Highlight`, and `TextAlign` extensions. The toolbar offers:
+
+- undo/redo; normal text, Heading 1, Heading 2;
+- bold, italic, underline, strikethrough;
+- text color (six colors plus default) and highlight (five colors plus none);
+- font size (12, 14, 16 default, 18, 20, 24, 30 px);
+- left, center, right, and justified alignment for paragraphs and headings;
+- bulleted and numbered lists, quotes, and clear formatting.
+
+Buttons show which formats are active and keep the text selection. The toolbar adapts to its own width (a CSS container query): narrow toolbars, on phones or with the sidebar open on smaller laptops, move the less common controls into a **More** menu instead of wrapping. Pickers close with Escape or a click outside. The usual shortcuts work (`Ctrl/⌘+B`, `I`, `U`, `Shift+S`, `Z`, `Shift+Z`, `Ctrl/⌘+Alt+1/2/0`, `Ctrl/⌘+Shift+7/8/B`, `Ctrl/⌘+Shift+L/E/R/J` for alignment). Markdown-style input such as `# `, `- `, and `1. ` also works. Viewers get no toolbar and a read-only editor.
+
+**Formatting is whitelisted.** Colors, font sizes, and alignments are rendered as inline styles, so arbitrary values could inject CSS. [`src/lib/documents/formatting.ts`](src/lib/documents/formatting.ts) defines the only allowed values. The editor drops anything else when parsing pasted HTML (for example, a pasted color outside the palette becomes default text), renders only allowed values, and the server rejects any saved document that contains other values or unknown style attributes. Documents saved before these options existed still load and save unchanged.
 
 Click the title to rename it. It saves when the field loses focus or you press Enter (Escape cancels). Titles are trimmed and must be 1–120 characters; an empty title is rejected and the previous one kept. If a rename fails, the typed title stays in the field with a Retry button.
 
@@ -245,6 +256,8 @@ Vitest runs in Node with no network access or Supabase credentials:
 
 - [`src/lib/documents/validation.test.ts`](src/lib/documents/validation.test.ts) covers title rules (valid, trimmed, empty, whitespace-only, overlong, non-string), content rules (valid documents, malformed roots and nodes, unsupported nodes and marks, heading levels, deep nesting, oversized and circular content), and UUID checks.
 - [`src/lib/documents/editor-content.test.ts`](src/lib/documents/editor-content.test.ts) builds documents with the editor's real schema and checks they pass validation directly and after the JSON round trip used by autosave.
+- [`src/lib/documents/formatting.test.ts`](src/lib/documents/formatting.test.ts) checks that colored, highlighted, resized, and aligned content survives the editor schema and the autosave round trip unchanged; that every palette value is accepted; that off-palette colors, CSS injection attempts, unbounded font sizes, unknown style attributes, and alignment on lists are rejected; that the editor won't render off-palette values; that older documents without alignment still validate; and how pasted CSS colors and sizes are normalized.
+- [`src/lib/search.test.ts`](src/lib/search.test.ts) and [`src/lib/sidebar-preference.test.ts`](src/lib/sidebar-preference.test.ts) cover the title filter (case, accents, regex characters, only the given list) and the stored sidebar preference (default, invalid values, broken storage).
 - [`src/lib/data/documents.test.ts`](src/lib/data/documents.test.ts) mocks the session and Supabase client to check that each operation uses the verified user's ID as owner, checks edit access before saving, rejects bad input without touching the database, reports expired sessions, treats rows hidden by RLS as not found, and hides database error details. The import tests also check that a successful import makes exactly one insert, and that failed validation or conversion makes none.
 - [`src/lib/import/import.test.ts`](src/lib/import/import.test.ts) covers file rules (extensions, empty and oversized files, invalid UTF-8, binary content, file-name titles) and pins the exact JSON produced for plain text and for each supported and unsupported Markdown construct, because `@tiptap/markdown` is still in beta.
 - [`src/components/editor/autosave-controller.test.ts`](src/components/editor/autosave-controller.test.ts) drives the autosave state machine with fake timers: debouncing, one save in flight with the newest content sent last, "saved" only once the latest revision is stored, failures for expired sessions, revoked access, view-only access, and database errors (edits kept, never shown as saved, Retry offered only when it can help), network failures followed by a successful retry, no saves when nothing was edited, and the final save when leaving the page.
@@ -391,7 +404,7 @@ vitest.config.mts              Test config (path alias, server-only stub)
 - After editing, going back to a dashboard shows its previous titles and order for a moment (about a tenth of a second in testing) before the refresh replaces them.
 - Signing out in another tab isn't noticed by an open tab until it next talks to the server (a navigation, save, or reload). That request is then refused and the tab goes to `/login`, or the save fails with "session expired".
 - Documents can't be deleted from the UI yet.
-- The editor only supports the formats listed above; links, images, and tables are not available.
+- The editor only supports the formats listed above; links, images, tables, font families, and custom colors are not available. Pasted formatting outside the palette and size list is dropped.
 - Import accepts one `.txt` or `.md` file at a time, up to 250 KB, chosen with the file picker (no drag-and-drop). DOCX, PDF, and other formats aren't supported.
 - Markdown imports keep the text of unsupported constructs but not their structure: link and image URLs, table layout, task-list checkboxes, and H3–H6 heading styles are lost. Link reference definitions and footnote definitions aren't standard rendered text and are dropped, as in rendered Markdown.
 - A file of many very short lines can be under 250 KB yet exceed the 500 KB document limit once converted; such imports are rejected with a message to split the file.

@@ -1,3 +1,9 @@
+import {
+  isFontSize,
+  isHighlightColor,
+  isTextAlignment,
+  isTextColor,
+} from "@/lib/documents/formatting";
 import type { Json } from "@/lib/supabase/database.types";
 
 export const DEFAULT_DOCUMENT_TITLE = "Untitled document";
@@ -27,7 +33,7 @@ export function createEmptyDocument(): TiptapDocument {
   return { type: "doc", content: [{ type: "paragraph" }] };
 }
 
-/** Nodes and marks produced by the editor's StarterKit configuration. */
+/** Nodes and marks produced by the editor's extensions (see components/editor/extensions.ts). */
 const ALLOWED_NODES = new Set([
   "paragraph",
   "text",
@@ -40,7 +46,24 @@ const ALLOWED_NODES = new Set([
   "horizontalRule",
   "hardBreak",
 ]);
-const ALLOWED_MARKS = new Set(["bold", "italic", "underline", "strike", "code"]);
+const ALLOWED_MARKS = new Set([
+  "bold",
+  "italic",
+  "underline",
+  "strike",
+  "code",
+  "textStyle",
+  "highlight",
+]);
+
+/**
+ * Attributes whose values are rendered into inline styles. Each may be absent
+ * or null; otherwise it must be one of the values in lib/documents/formatting.
+ */
+const STYLED_MARK_ATTRS: Record<string, Record<string, (value: unknown) => boolean>> = {
+  textStyle: { color: isTextColor, fontSize: isFontSize },
+  highlight: { color: isHighlightColor },
+};
 export const ALLOWED_HEADING_LEVELS = [1, 2] as const;
 
 export type ValidationResult<T> =
@@ -161,6 +184,14 @@ function validateNode(node: unknown, depth: number): string | null {
     }
   }
 
+  const textAlign = isPlainObject(node.attrs) ? node.attrs.textAlign : undefined;
+  if (textAlign !== undefined && textAlign !== null) {
+    if (node.type !== "paragraph" && node.type !== "heading") {
+      return `"${node.type}" nodes can't be aligned.`;
+    }
+    if (!isTextAlignment(textAlign)) return "unsupported text alignment.";
+  }
+
   if (node.marks !== undefined) {
     if (!Array.isArray(node.marks)) return "marks must be a list.";
     for (const mark of node.marks) {
@@ -173,6 +204,8 @@ function validateNode(node: unknown, depth: number): string | null {
       if (!isValidAttrs(mark.attrs)) {
         return "mark attributes must be an object.";
       }
+      const error = validateStyledMarkAttrs(mark.type, mark.attrs);
+      if (error) return error;
     }
   }
 
@@ -184,6 +217,18 @@ function validateNode(node: unknown, depth: number): string | null {
     }
   }
 
+  return null;
+}
+
+function validateStyledMarkAttrs(type: string, attrs: unknown): string | null {
+  const rules = STYLED_MARK_ATTRS[type];
+  if (!rules || !isPlainObject(attrs)) return null;
+  for (const [key, value] of Object.entries(attrs)) {
+    if (value === null || value === undefined) continue;
+    const isAllowed = rules[key];
+    if (!isAllowed) return `unsupported "${type}" attribute "${key}".`;
+    if (!isAllowed(value)) return `unsupported ${key} value.`;
+  }
   return null;
 }
 

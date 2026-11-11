@@ -97,6 +97,13 @@ body {
   color: var(--color-ink-muted);
 }
 
+.folio-editor mark {
+  border-radius: 0.2em;
+  background-color: #fef08a;
+  color: inherit;
+  padding: 0 0.1em;
+}
+
 .folio-editor code {
   border-radius: 0.25rem;
   background: var(--color-canvas);

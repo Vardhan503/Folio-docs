@@ -141,7 +141,7 @@ export function convertImportedText(
 
     const node = editorSchema.nodeFromJSON(converted);
     node.check();
-    json = JSON.parse(JSON.stringify(node.toJSON()));
+    json = omitDefaultAlignment(JSON.parse(JSON.stringify(node.toJSON())));
   } catch {
     return { ok: false, error: CONVERSION_ERRORS.failed };
   }
@@ -152,6 +152,22 @@ export function convertImportedText(
     return { ok: false, error: tooLarge ? CONVERSION_ERRORS.tooLarge : CONVERSION_ERRORS.failed };
   }
   return validated;
+}
+
+/**
+ * The schema gives every paragraph and heading `textAlign: null`. Imports drop
+ * it (the editor treats a missing value the same) to keep stored JSON compact.
+ */
+export function omitDefaultAlignment(node: JSONContent): JSONContent {
+  const { attrs, content, ...rest } = node;
+  const result: JSONContent = rest;
+  if (attrs) {
+    const { textAlign, ...otherAttrs } = attrs;
+    const kept = textAlign == null ? otherAttrs : attrs;
+    if (Object.keys(kept).length > 0) result.attrs = kept;
+  }
+  if (content) result.content = content.map(omitDefaultAlignment);
+  return result;
 }
 
 function hasText(node: JSONContent): boolean {

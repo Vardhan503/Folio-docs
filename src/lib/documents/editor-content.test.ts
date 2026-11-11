@@ -57,7 +57,7 @@ describe("editor-generated content", () => {
 
     expect(Object.getPrototypeOf(heading.attrs)).toBeNull();
     expect(orderedList.attrs).toEqual({ start: 1, type: null });
-    expect(blocks[1]).toEqual({ type: "paragraph" });
+    expect(blocks[1]).toEqual({ type: "paragraph", attrs: { textAlign: null } });
   });
 
   it("accepts editor JSON directly", () => {
